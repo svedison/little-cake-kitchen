@@ -1,98 +1,102 @@
-# Little Cake Kitchen — Spec
+# Creme's Kitchen — Spec
 
-A tiny, cozy browser game about making cakes. Three recipes: **Tiramisu**, **Basque Cheesecake** (in three flavors) and **Cream Puff**.
+A cute, **Tactile** 3D cake-baking game for the browser, made for Creme. One continuous kitchen, one finger, real-feeling eggs, batter and cream, real kitchen sounds. Vocabulary is in [CONTEXT.md](./CONTEXT.md); the big decisions are in [docs/adr](./docs/adr).
+
+This replaces the 2D version (see git history before the 3D rebuild). Its recipes, verdict lines and cat expressions carry over.
 
 ## Goals
 
-- **Easy.** Anyone can finish a cake in 2–3 minutes with no instructions. No fail state, no timers that punish, no lives.
-- **Cute.** Soft pastel palette, rounded everything, a little mascot who cheers you on. Every action should feel satisfying (a wobble, a sparkle, a soft sound).
-- **Small.** One HTML file + one CSS + one JS, no framework, no build step, no backend. Runs on phone and laptop by opening the file or a static link.
+- **Tactile.** Things feel real because they *respond* like the real thing: the egg cracks where you hit it, the stream bends when you move the jug, the whisk sound rises with your speed. Not photoreal; the look stays soft and cute.
+- **Easy.** One finger, four gestures learned once, no instructions, no fail state. A cake takes a few minutes.
+- **Cute.** Pastel palette, rounded everything, the chef cat in the room with you.
 
-Non-goals: scoring leaderboards, accounts, monetization, realistic baking.
+Non-goals: photorealism, true fluid simulation (ADR-0002), scoring, accounts, anything with a server.
 
-## Screens
+## The Kitchen
 
-1. **Title** — logo, mascot, one button: *Let's bake!* (plus a small *History* link so saved cakes are reachable without baking)
-2. **Recipe pick** — three big cards (Tiramisu, Basque, Cream Puff). Tap one. Basque opens a little row of flavor chips (*Classic · Blueberry · Lemon*) under its card; tap a chip to start.
-3. **Baking** — the recipe plays as a sequence of steps (below). One step at a time, full screen, big "Next" transition once the step is done.
-4. **Reveal** — the finished cake slides in, confetti, mascot says something sweet, cake gets a little name tag ("Cake #3 · Tiramisu"). Then the **taste test**: drag the cake into the cat's mouth. The cat chomps, the cake vanishes, and the cat rates it by how the key step went — *ass* 💀 (under), *mid* 😐 (a bit much), *bussin* 🔥 (just right) — as a big pill plus a line in its speech bubble. Feeding is optional; *Bake another* / *History* are always there. The verdict is saved on the cake's history entry.
-5. **History** — grid of every cake made so far, newest first, saved in `localStorage`. Each card shows the cake, its name and the cat's rating pill (*ass* / *mid* / *bussin*, or a dashed *not tasted* if it was never fed to the cat). Tap a cake to see it bigger with its date and rating. Reached from the title screen and the reveal screen.
+Everything happens in one 3D room, seen from a fixed camera on a rail with three **Stations**. A horizontal swipe on empty space turns you to the next one; a Step always faces its Station when it starts.
 
-## Interactions (only 3 kinds)
-
-Every step in both recipes uses one of these, so the player learns them once:
-
-| Kind | How it works | Feel |
+| Station | What's there | Steps that happen here |
 |---|---|---|
-| **Tap** | Tap the thing N times (e.g. crack eggs, tap to pour). A small meter fills. | Each tap = a little bounce + "pop" |
-| **Hold** | Press and hold to whisk / bake. A ring fills up; release when it's in the "just right" zone. Overshooting just makes it "a bit much" — never a fail. | Rumble/wobble while holding, chime at the sweet spot |
-| **Drag** | Drag an item from a tray onto the bowl/pan (ladyfingers, cream layers, into the oven). Snaps when close. | Item wiggles while held, "plop" when dropped |
+| **Counter** | bowl, whisk, spatula, egg carton, jug, flour, sugar, the recipe book, the cat | crack, mix, stir, pour, fill, dust |
+| **Stove** | hob with pot and moka pot, oven with a window | boil, brew, bake |
+| **Fridge** | fridge (chill, cold ingredients), pantry, the **Shelf** | chill, fetch cream, browse past cakes |
+
+**Session start:** a two-second title card ("Creme's Kitchen", hides loading) fades into the Counter. The cat waves. The recipe book on the counter is how you pick a recipe: flip pages, tap one to start (Basque shows its three flavor chips). After a reveal, the cat nudges the book to bake another.
+
+## Gestures (four, learned once)
+
+| Gesture | Motion | Used for |
+|---|---|---|
+| **Tap** | hit a thing | crack an egg on the rim, press the oven button, shake the shaker |
+| **Hold** | keep your finger down; something sustained happens | hold the jug over the bowl and it tilts and pours; hold the oven and it bakes |
+| **Drag** | pick up and carry | ladyfinger to the dish, tray into the oven, parchment onto the pan |
+| **Stir** | circle your finger | whisk, mix, spread cream |
+
+Hold and Stir produce a **Result**: under / just right / over, decided by duration only. A wobbly circle never counts against you.
+
+Touching something that isn't part of the current Step gets a **Nudge**: a cute wiggle, nothing else. Nothing ever overflows, burns to ruin, or fails.
+
+## Physics and softness (ADR-0002)
+
+- Solids are rigid bodies (Rapier): eggs, shells, ladyfingers, tools, trays, the cake once baked.
+- Pours are particle ribbons that follow the jug and splash on landing.
+- Batter in the bowl and cream on a cake are deformable surface meshes: they slosh under the whisk, bunch ahead of the spatula, dimple under a finger, rise as you pour.
+- Dusting (cocoa, sugar) is a particle sprinkle that settles onto the surface.
+
+## Sound
+
+Recorded kitchen sounds, several takes each with slight pitch variation, no music. Sound is **tied to the physics**: the whisk gets louder as you stir faster, the pour stops the instant you lift the jug, the crack plays at the moment of contact. On by default (the first tap unlocks audio), with a mute button. Total audio budget about 3 MB.
+
+## The cat
+
+Same chef cat, now a round 3D body with a flat cartoon face that swaps the seven expressions (idle, excited, ooh, sleepy, yum, meh, love). Sits on the Counter, turns to follow the camera, paws point at the next object. Built in code, no rig. The chomp is the one hand-animated moment. The cat uses Creme's name once at the reveal.
+
+## Reveal, taste test, Shelf
+
+All in-world. The cake comes out of the oven onto the counter with confetti; drag it to the cat for the taste test; it chomps and rates it **bussin 🔥 / mid 😐 / ass 💀** from the key Step's Result. Every cake then appears on the **Shelf** at the Fridge Station as a small model with its verdict tag; the latest dozen sit on the Shelf, the rest behind a tap. Saved in local storage under the same key as the 2D game, so earlier cakes show up too.
 
 ## Recipes
 
-### Tiramisu (7 steps)
+Step lists are unchanged from the 2D game; each step is now a physical action at a Station.
 
-1. **Brew the espresso** — Tap the moka pot 3 times. Steam rises.
-2. **Whisk the mascarpone cream** — Hold to whisk. Sweet spot = fluffy.
-3. **Dip ladyfingers** — Drag 4 ladyfingers into the coffee, then into the dish. (Hold them in too long and they go "soggy" — cosmetic only.)
-4. **Spread cream** — Drag the spatula across the dish (horizontal swipe, snaps to full coverage).
-5. **Second layer** — Repeat steps 3 and 4, faster (3 ladyfingers).
-6. **Dust with cocoa** — Tap the shaker 5 times. Cocoa falls like snow.
-7. **Chill in the fridge** — Hold to "wait." The fridge hums, a moon rises, a clock spins. Release anytime after the sweet spot.
+### Basque Cheesecake (first, and the reference recipe)
 
-### Basque Cheesecake (6 steps)
+1. **Line the pan** — Drag parchment onto the pan (Counter).
+2. **Mix cream cheese & sugar** — Stir. Sweet spot = smooth.
+3. **Crack the eggs** — Tap each egg on the bowl rim; shell halves, yolk plops in.
+4. **Pour in cream & flour** (and blueberries / lemon for those flavors) — Hold the jug, then the flour cup, over the bowl.
+5. **Pour into the pan** — Hold to pour; batter rises in the pan.
+6. **Bake it HOT** — Hold at the Stove; watch the top scorch through the oven window. Sweet spot = burnt top (key Step).
 
-1. **Line the pan** — Drag the parchment onto the pan. It crumples cutely.
-2. **Mix cream cheese & sugar** — Hold to mix. Sweet spot = smooth.
-3. **Crack the eggs** — Tap 3 eggs, one at a time, on the bowl rim.
-4. **Pour in cream & flour** — Drag the jug, then the flour cup, into the bowl.
-5. **Pour into the pan** — Hold to pour. Batter rises in the pan.
-6. **Bake it HOT** — Hold to bake. The ring runs from pale → golden → **burnt-top brown** (the sweet spot — basque is supposed to look burnt!). Going past it just makes it darker.
+### Tiramisu
 
-**Flavors:** Classic, Blueberry, Lemon. A flavor only changes small things: Blueberry and Lemon add a third item to drag into the bowl in step 4 (and the step title becomes "Cream, flour & blueberries"), the batter/bowl/pour/oven are tinted, and the finished cake gets a tinted body plus a little garnish. The name tag reads "Blueberry Basque". The steps, timing and sweet spots are identical.
+Brew the espresso (Tap moka, Stove) · Whisk the mascarpone (Stir) · Dip ladyfingers (Drag, dunk then dish; soggy timer is cosmetic) · Spread cream (Stir with the spatula) · Second layer · Dust with cocoa (Tap) · Chill (Hold at the Fridge; key Step).
 
-### Cream Puff (7 steps)
+### Cream Puff
 
-1. **Boil butter & water** — Tap the pot 3 times. Bubbles rise.
-2. **Stir in the flour** — Hold to stir. Sweet spot = "a smooth ball".
-3. **Beat in the eggs** — Tap 3 eggs.
-4. **Pipe the puffs** — Drag 4 dough blobs onto the baking sheet.
-5. **Bake until puffed** — Hold to bake. The puffs swell and turn golden; sweet spot = golden, past it = a bit dark. (Key step for the reveal.)
-6. **Fill with cream** — Drag 3 cream swirls onto the baked puffs.
-7. **Dust with sugar** — Tap the shaker 5 times. Snow!
+Boil butter & water (Tap, Stove) · Stir in the flour (Stir) · Beat in the eggs (Tap) · Pipe the puffs (Drag) · Bake until puffed (Hold, Stove; key Step) · Fill with cream (Drag) · Dust with sugar (Tap).
 
-## Finished cake variations
+## Art
 
-The reveal shows a cake whose look depends on the Hold steps:
-
-- **Under / just right / a bit much** on 1–2 key steps changes the drawing slightly (e.g. tiramisu cream flatter vs. fluffy; basque top pale vs. perfectly scorched vs. extra dark; cream puff shells pale vs. golden vs. dark).
-- Mascot comment matches: "A little pale, but still delicious!" / "PERFECT burnt top!!" / "Extra toasty — crunchy edges!"
-- No numeric score. The cake is always a success.
-
-## Visual style
-
-- **Palette:** cream `#FFF6E9`, strawberry pink `#FFB6C1`, cocoa brown `#6B4A3A`, matcha green `#B9D8A8`, butter yellow `#FFE8A3`. Dark mode not needed.
-- **Shapes:** everything rounded (border-radius 16–24px), thick soft outlines, chunky buttons with a drop shadow that "presses" on tap.
-- **Font:** one rounded display font (e.g. *Fredoka* or *Baloo 2* from Google Fonts) for everything.
-- **Art:** simple inline SVG or emoji-scale illustrations. Hand-drawn feel over polished. Can be upgraded later without touching logic.
-- **Mascot:** a round cat (or whatever she likes) in a chef hat, bottom-left corner, ~140px wide so it's always clearly visible (page content keeps a bottom margin for it). Expressions: idle, excited, "ooh", sleepy (fridge step), yum (chewing), meh (ass verdict), love (bussin verdict).
-- **Motion:** CSS transitions/keyframes only. Bounce on tap, wobble on hold, slide-in between steps, confetti on reveal.
-- **Sound:** 5–6 tiny sounds (pop, plop, whisk, chime, ding, confetti). Muted by default with a toggle; works fully without sound.
+- **Props and furniture:** a CC0 low-poly kit (Kenney / Poly Pizza) so the room is coherent from day one. Any prop can be swapped later.
+- **Soft things and cakes:** procedural meshes in code, because they have to deform anyway.
+- **Cat:** in code.
+- Palette: cream `#FFF6E9`, pink `#FFB6C1`, cocoa `#6B4A3A`, matcha `#B9D8A8`, butter `#FFE8A3`. Font: Fredoka.
 
 ## Tech
 
-- `index.html`, `style.css`, `game.js`. Vanilla JS. No dependencies except the Google Font.
-- Recipes are **data, not code**: each recipe is an array of step objects `{ title, kind: 'tap'|'hold'|'drag', target, art, mascotLine }`. The step runner handles the three kinds. Adding another cake = adding an array + its art. A recipe with `flavors` may give `steps` as a function of the chosen flavor.
-- State: `currentRecipe`, `flavor`, `steps`, `stepIndex`, `stepResults[]`, `gallery[]` (persisted to `localStorage`; entries remember their flavor and the cat's verdict).
-- Works on touch and mouse (pointer events). Portrait phone layout first, scales up on desktop.
-- Target: no step needs more than one gesture type; whole file set under ~200 KB.
+- three.js + Rapier (WebAssembly), TypeScript, Vite. Static build deployed to GitHub Pages.
+- Target: a recent flagship phone, portrait, 60 fps. Real-time shadows and generous particles are in budget; the game may scale them down on slower devices but is not designed for them.
+- Recipes stay **data**: a list of Steps `{ title, gesture, station, target, key? }`; the Kitchen runs them.
 
-## Nice-to-haves (only after the above feels good)
+## Build order
 
-- A personal touch: title screen says "made for [her name]" and the mascot uses her name once.
-- Her own hand-drawn cake art swapped in for the SVGs.
-- More cakes or flavors she picks.
+1. **Vertical slice:** title card → Counter → crack three eggs into the bowl. Real physics, shell crack sound, yolk plop, 60 fps on Creme's phone. Nothing else. This proves gestures, physics, sound and performance in the smallest thing.
+2. **Full Basque, rough:** all six Steps across three Stations, reveal, taste test, Shelf, placeholder props and sounds.
+3. **Polish Basque to the Tactile bar**, step by step.
+4. **Tiramisu, then Cream Puff**, reusing everything.
 
 ## Out of scope
 
-Difficulty levels, ingredients inventory, shop/currency, multiplayer, tutorials (the game *is* the tutorial), anything that needs a server.
+Walking around, free camera, true fluids, recipe recognition / free-form cooking, difficulty, shop, multiplayer, anything needing a server.

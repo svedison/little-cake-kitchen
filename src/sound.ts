@@ -1,9 +1,16 @@
 // Kitchen sounds. Recorded samples are the goal (see SPEC.md); until they are
 // dropped into public/sounds/, each sound is synthesized so the feel can be tuned now.
+// Sustained sounds (whisk, pour, oven) are loops whose level follows the physics.
 
-export type SoundName = 'crack' | 'plop' | 'tap' | 'clink';
+export type SoundName = 'crack' | 'plop' | 'tap' | 'clink' | 'paper' | 'door' | 'ding' | 'chomp' | 'confetti' | 'pop' | 'berry';
+export type LoopName = 'whisk' | 'pour' | 'oven' | 'flour';
 
 type Manifest = Partial<Record<SoundName, string[]>>;
+
+export interface Loop {
+  set(level: number): void;
+  stop(): void;
+}
 
 class Sound {
   muted = false;
@@ -32,12 +39,59 @@ class Sound {
 
   /** gain scales loudness; rate shifts pitch (1 = as recorded). Both get a little random variation. */
   play(name: SoundName, opts: { gain?: number; rate?: number } = {}) {
-    if (!this.ctx || !this.master || this.muted) return;
+    if (!this.ctx || !this.master) return;
     const gain = (opts.gain ?? 1) * (0.9 + Math.random() * 0.2);
     const rate = (opts.rate ?? 1) * (0.94 + Math.random() * 0.12);
     const bufs = this.samples[name];
     if (bufs && bufs.length) return this.playBuffer(bufs[Math.floor(Math.random() * bufs.length)], gain, rate);
     this.synth[name](gain, rate);
+  }
+
+  /** A sustained sound. Call set() every frame with 0..1, stop() when done. */
+  loop(name: LoopName): Loop {
+    if (!this.ctx || !this.master) return { set() {}, stop() {} };
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuffer();
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    const cfg = {
+      whisk: { type: 'bandpass' as BiquadFilterType, freq: 2200, q: 0.7, max: 0.35 },
+      pour: { type: 'lowpass' as BiquadFilterType, freq: 700, q: 0.5, max: 0.4 },
+      oven: { type: 'lowpass' as BiquadFilterType, freq: 180, q: 0.8, max: 0.3 },
+      flour: { type: 'highpass' as BiquadFilterType, freq: 3000, q: 0.5, max: 0.18 },
+    }[name];
+    f.type = cfg.type;
+    f.frequency.value = cfg.freq;
+    f.Q.value = cfg.q;
+    src.connect(f).connect(g).connect(this.master);
+    src.start();
+    let hum: OscillatorNode | null = null;
+    let humGain: GainNode | null = null;
+    if (name === 'oven') {
+      hum = ctx.createOscillator();
+      hum.type = 'triangle';
+      hum.frequency.value = 55;
+      humGain = ctx.createGain();
+      humGain.gain.value = 0;
+      hum.connect(humGain).connect(this.master);
+      hum.start();
+    }
+    return {
+      set: (level) => {
+        const l = Math.max(0, Math.min(1, level));
+        g.gain.setTargetAtTime(l * cfg.max, ctx.currentTime, 0.05);
+        if (name === 'whisk') f.frequency.setTargetAtTime(1500 + l * 1800, ctx.currentTime, 0.05);
+        humGain?.gain.setTargetAtTime(l * 0.12, ctx.currentTime, 0.1);
+      },
+      stop: () => {
+        g.gain.setTargetAtTime(0, ctx.currentTime, 0.08);
+        humGain?.gain.setTargetAtTime(0, ctx.currentTime, 0.08);
+        setTimeout(() => { src.stop(); hum?.stop(); }, 400);
+      },
+    };
   }
 
   private async loadSamples() {
@@ -144,6 +198,44 @@ class Sound {
     clink: (gain, rate) => {
       const t = this.ctx!.currentTime;
       this.burst(t, 0.03, 3600 * rate, 1.5, gain * 0.18, 'highpass');
+    },
+    // Parchment crinkling into the pan.
+    paper: (gain, rate) => {
+      const t = this.ctx!.currentTime;
+      for (let i = 0; i < 6; i++) this.burst(t + i * 0.04 + Math.random() * 0.02, 0.05, (3000 + Math.random() * 3000) * rate, 0.8, gain * 0.12, 'highpass');
+    },
+    // Oven door.
+    door: (gain, rate) => {
+      const t = this.ctx!.currentTime;
+      this.tone(t, 0.1, 140 * rate, 50, gain * 0.4);
+      this.burst(t, 0.06, 500 * rate, 0.6, gain * 0.2, 'lowpass');
+    },
+    // Timer / sweet spot.
+    ding: (gain, rate) => {
+      const t = this.ctx!.currentTime;
+      this.tone(t, 0.5, 1320 * rate, 1300 * rate, gain * 0.25);
+      this.tone(t, 0.35, 2640 * rate, 2600 * rate, gain * 0.08);
+    },
+    // The cat eating.
+    chomp: (gain, rate) => {
+      const t = this.ctx!.currentTime;
+      this.burst(t, 0.07, 420 * rate, 0.7, gain * 0.5, 'lowpass');
+      this.tone(t, 0.07, 220 * rate, 90, gain * 0.3);
+    },
+    // Reveal.
+    confetti: (gain, rate) => {
+      const t = this.ctx!.currentTime;
+      [523, 659, 784, 1047].forEach((f, i) => this.tone(t + i * 0.09, 0.3, f * rate, f * rate, gain * 0.18, 'triangle'));
+      this.burst(t, 0.3, 4000, 0.5, gain * 0.1, 'highpass');
+    },
+    pop: (gain, rate) => {
+      const t = this.ctx!.currentTime;
+      this.tone(t, 0.06, 600 * rate, 300, gain * 0.3);
+    },
+    // A blueberry dropping in.
+    berry: (gain, rate) => {
+      const t = this.ctx!.currentTime;
+      this.tone(t, 0.07, 800 * rate, 300, gain * 0.2);
     },
   };
 }

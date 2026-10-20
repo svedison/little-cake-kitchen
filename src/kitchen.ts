@@ -1,7 +1,9 @@
-// The Kitchen: the one 3D room everything happens in. For the vertical slice it
-// is just the Counter station: counter top, a wall, a bowl, lights and physics.
+// The Kitchen: the one 3D room everything happens in. Rendering, physics, the camera
+// rail, pointer input, and the long counter the three Stations share.
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
+import { Pointer } from './input';
+import { Rail } from './camera';
 
 export const P = {
   cream: 0xfff6e9,
@@ -15,15 +17,17 @@ export const P = {
   shell: 0xf8ecd9,
   yolk: 0xffb340,
   white: 0xfff6dc,
+  paper: 0xf2e6d0,
+  steel: 0xcdd3db,
 };
 
-export interface Bowl {
-  center: THREE.Vector3;
-  rimRadius: number;
-  rimY: number;
-  floorY: number;
-  collider: RAPIER.Collider;
-}
+/** Where things sit at a Station, relative to the Station's x. */
+export const SLOT = {
+  bowl: new THREE.Vector3(0, 0, -0.06),
+  front: new THREE.Vector3(0, 0, 0.17),
+  side: new THREE.Vector3(0.17, 0, 0.1),
+  cat: new THREE.Vector3(-0.135, 0, -0.25),
+};
 
 export type CollisionHandler = (a: RAPIER.Collider, b: RAPIER.Collider) => void;
 
@@ -31,21 +35,22 @@ const STEP = 1 / 60;
 
 export class Kitchen {
   readonly scene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(50, 1, 0.05, 6);
+  readonly camera = new THREE.PerspectiveCamera(50, 1, 0.05, 8);
   readonly renderer: THREE.WebGLRenderer;
   readonly world: RAPIER.World;
-  readonly bowl: Bowl;
-  readonly counterCollider: RAPIER.Collider;
+  readonly pointer: Pointer;
+  readonly rail: Rail;
   readonly updaters = new Set<(dt: number, t: number) => void>();
   readonly onCollision = new Set<CollisionHandler>();
   /** Smoothed frames per second, for tuning on a real phone. */
   fps = 60;
+  time = 0;
 
   private readonly events = new RAPIER.EventQueue(true);
   private readonly raycaster = new THREE.Raycaster();
+  private readonly sun: THREE.DirectionalLight;
   private acc = 0;
   private last = performance.now();
-  private time = 0;
 
   static async create(canvas: HTMLCanvasElement) {
     await RAPIER.init();
@@ -60,15 +65,15 @@ export class Kitchen {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.scene.background = new THREE.Color(P.cream);
 
-    this.camera.position.set(0, 0.5, 0.42);
-    this.camera.lookAt(0, 0.02, -0.02);
-
     this.world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
     this.world.timestep = STEP;
 
-    this.addLights();
-    this.counterCollider = this.addCounter();
-    this.bowl = this.addBowl(new THREE.Vector3(0, 0, -0.06));
+    this.pointer = new Pointer(canvas);
+    this.rail = new Rail(this.camera);
+    this.pointer.swipe = this.rail;
+
+    this.sun = this.addLights();
+    this.addCounter();
 
     window.addEventListener('resize', () => this.resize());
     this.resize();
@@ -94,10 +99,26 @@ export class Kitchen {
     return ray.origin.clone().addScaledVector(ray.direction, t);
   }
 
+  /** Finger position projected onto the plane at height y. */
+  fingerAt(x: number, y: number, planeY: number) {
+    return this.pointOnPlane(this.ray(x, y), planeY);
+  }
+
   /** World point to CSS pixel coordinates. */
   toScreen(p: THREE.Vector3) {
     const v = p.clone().project(this.camera);
     return { x: ((v.x + 1) / 2) * window.innerWidth, y: ((1 - v.y) / 2) * window.innerHeight };
+  }
+
+  /** CSS pixel distance between a finger and a world point. */
+  screenDist(x: number, y: number, p: THREE.Vector3) {
+    const s = this.toScreen(p);
+    return Math.hypot(s.x - x, s.y - y);
+  }
+
+  /** World position of a slot at the current Station. */
+  at(slot: THREE.Vector3, station?: number) {
+    return slot.clone().setX(slot.x + (station ?? 0));
   }
 
   private frame() {
@@ -122,6 +143,9 @@ export class Kitchen {
     }
     if (steps === 4) this.acc = 0; // tab was hidden; don't try to catch up
 
+    this.rail.update(dt);
+    this.sun.position.set(this.rail.x + 0.45, 1.1, 0.55);
+    this.sun.target.position.set(this.rail.x, 0, 0);
     for (const u of this.updaters) u(dt, this.time);
     this.renderer.render(this.scene, this.camera);
   }
@@ -131,9 +155,11 @@ export class Kitchen {
     const h = window.innerHeight;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
-    // Portrait phones need a wider vertical field so the bowl and carton both fit.
+    // Portrait phones need a wider vertical field so the bowl and the front slot both fit.
     this.camera.fov = this.camera.aspect < 0.75 ? 58 : this.camera.aspect < 1.2 ? 48 : 40;
     this.camera.updateProjectionMatrix();
+    this.rail.landscape = this.camera.aspect > 1.2;
+    this.rail.update(0);
   }
 
   private addLights() {
@@ -144,19 +170,21 @@ export class Kitchen {
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.near = 0.2;
     sun.shadow.camera.far = 3;
-    sun.shadow.camera.left = sun.shadow.camera.bottom = -0.5;
-    sun.shadow.camera.right = sun.shadow.camera.top = 0.5;
+    sun.shadow.camera.left = sun.shadow.camera.bottom = -0.6;
+    sun.shadow.camera.right = sun.shadow.camera.top = 0.6;
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 0.002;
     this.scene.add(sun);
+    this.scene.add(sun.target);
     const fill = new THREE.DirectionalLight(0xdde8ff, 0.6);
     fill.position.set(-0.6, 0.5, 0.3);
     this.scene.add(fill);
+    return sun;
   }
 
   private addCounter() {
     const top = new THREE.Mesh(
-      new THREE.BoxGeometry(1.6, 0.04, 1.1),
+      new THREE.BoxGeometry(3.6, 0.04, 1.1),
       new THREE.MeshStandardMaterial({ color: P.wood, roughness: 0.9 }),
     );
     top.position.y = -0.02;
@@ -164,33 +192,13 @@ export class Kitchen {
     this.scene.add(top);
 
     const wall = new THREE.Mesh(
-      new THREE.PlaneGeometry(3, 1.5),
+      new THREE.PlaneGeometry(5, 1.6),
       new THREE.MeshStandardMaterial({ color: P.wall, emissive: P.wall, emissiveIntensity: 0.35, roughness: 1 }),
     );
-    wall.position.set(0, 0.7, -0.55);
+    wall.position.set(0, 0.75, -0.55);
     this.scene.add(wall);
 
     const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.02, 0));
-    return this.world.createCollider(RAPIER.ColliderDesc.cuboid(0.8, 0.02, 0.55).setFriction(0.9), body);
-  }
-
-  private addBowl(center: THREE.Vector3): Bowl {
-    // Outside goes up from the base to the rim, then the inside comes back down to the floor.
-    const profile = [
-      [0, 0], [0.08, 0], [0.12, 0.045], [0.135, 0.095],
-      [0.125, 0.095], [0.11, 0.05], [0.07, 0.006], [0, 0.006],
-    ].map(([x, y]) => new THREE.Vector2(x, y));
-    const geo = new THREE.LatheGeometry(profile, 64);
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: P.matcha, roughness: 0.45, side: THREE.DoubleSide }));
-    mesh.position.copy(center);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    this.scene.add(mesh);
-
-    const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(center.x, center.y, center.z));
-    const verts = geo.attributes.position.array as Float32Array;
-    const idx = Uint32Array.from(geo.index!.array);
-    const collider = this.world.createCollider(RAPIER.ColliderDesc.trimesh(verts, idx).setFriction(0.8), body);
-    return { center, rimRadius: 0.13, rimY: 0.095, floorY: 0.006, collider };
+    this.world.createCollider(RAPIER.ColliderDesc.cuboid(1.8, 0.02, 0.55).setFriction(0.9), body);
   }
 }

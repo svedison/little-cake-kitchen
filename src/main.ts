@@ -1,6 +1,7 @@
 import './style.css';
 import { Kitchen } from './kitchen';
-import { EggStep } from './eggs';
+import { Hud } from './hud';
+import { Game } from './game';
 import { sound } from './sound';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -9,30 +10,13 @@ const canvas = $<HTMLCanvasElement>('c');
 const title = $('title');
 const start = $<HTMLButtonElement>('start');
 const loading = $('loading');
-const hud = $('hud');
-const hint = $('hint');
-const stepTitle = $('step-title');
-const pips = $('pips');
-const again = $<HTMLButtonElement>('again');
 const mute = $<HTMLButtonElement>('mute');
 
 start.disabled = true;
 
 const kitchen = await Kitchen.create(canvas);
-const step = new EggStep(kitchen, {
-  onProgress(cracked, total) {
-    pips.querySelectorAll('span').forEach((p, i) => p.classList.toggle('on', i < cracked));
-    if (cracked > 0 && cracked < total) hint.textContent = cracked === 1 ? 'Lovely! Two more.' : 'One more!';
-    if (cracked === 0) { hint.textContent = 'Pick up an egg and knock it on the edge of the bowl'; again.hidden = true; stepTitle.textContent = 'Crack the eggs'; }
-  },
-  onDone() {
-    stepTitle.textContent = 'Ta-da!';
-    hint.textContent = 'Three eggs in the bowl. That is the whole slice for now.';
-    again.hidden = false;
-  },
-});
-
-for (let i = 0; i < step.total; i++) pips.appendChild(document.createElement('span'));
+const hud = new Hud();
+const game = new Game(kitchen, hud);
 
 loading.textContent = '';
 start.disabled = false;
@@ -40,12 +24,10 @@ start.disabled = false;
 start.addEventListener('click', () => {
   sound.unlock();
   title.classList.add('away');
-  hud.hidden = false;
   mute.hidden = false;
   kitchen.start();
+  game.begin();
 });
-
-again.addEventListener('click', () => step.reset());
 
 mute.addEventListener('click', () => {
   const m = !sound.muted;
@@ -64,8 +46,18 @@ if (new URLSearchParams(location.search).has('fps')) {
 }
 
 // Hooks for the headless test driver.
-(window as unknown as { __slice: unknown }).__slice = {
-  screen: () => step.screen(),
-  state: () => ({ cracked: step.cracked, landed: step.landed, fps: kitchen.fps }),
-  reset: () => step.reset(),
+(window as unknown as { __game: unknown }).__game = {
+  state: () => ({
+    phase: game.phase,
+    step: game.stepIndex,
+    station: kitchen.rail.current,
+    settled: kitchen.rail.settled,
+    results: [...game.results],
+    cakes: game.gallery.length,
+    verdict: game.gallery.at(-1)?.verdict ?? null,
+    fps: kitchen.fps,
+  }),
+  targets: () => Object.fromEntries(Object.entries(game.targets()).map(([k, v]) => [k, kitchen.toScreen(v)])),
+  startRecipe: (flavor: string) => game.startRecipe(game.flavor.id === flavor ? game.flavor : (['classic', 'blueberry', 'lemon'].includes(flavor) ? { ...game.flavor, id: flavor as 'classic', name: flavor, chip: '', addIn: flavor === 'blueberry' ? 'berries' : flavor === 'lemon' ? 'lemon' : undefined } : game.flavor)),
+  goTo: (id: 'fridge' | 'counter' | 'stove') => kitchen.rail.goTo(id),
 };

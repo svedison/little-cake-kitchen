@@ -92,9 +92,9 @@ Boil butter & water (Tap, Stove) · Stir in the flour (Stir) · Beat in the eggs
 
 ## Build order
 
-1. **Vertical slice:** title card → Counter → crack three eggs into the bowl. Real physics, shell crack sound, yolk plop, 60 fps on Creme's phone. Nothing else. This proves gestures, physics, sound and performance in the smallest thing.
-2. **Full Basque, rough:** all six Steps across three Stations, reveal, taste test, Shelf, placeholder props and sounds.
-3. **Polish Basque to the Tactile bar**, step by step.
+1. ~~**Vertical slice:** title card → Counter → crack three eggs into the bowl.~~ Done; felt smooth on Creme's phone.
+2. ~~**Full Basque, rough:** all six Steps across three Stations, reveal, taste test, Shelf, placeholder props and sounds.~~ Done.
+3. **Polish Basque to the Tactile bar**, step by step. Known rough spots: the pan is not visible through the oven window while baking; the Shelf is a plain stand; stir and pour meters are HTML rings rather than in-world cues; sounds are still synthesized; the bundle is large because Rapier's compat build inlines its WebAssembly.
 4. **Tiramisu, then Cream Puff**, reusing everything.
 
 ## Out of scope

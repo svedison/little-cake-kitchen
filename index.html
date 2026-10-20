@@ -13,18 +13,46 @@
   <canvas id="c"></canvas>
 
   <div id="hud" class="hud" hidden>
-    <header class="step">
-      <span id="step-count" class="step-count">Step 3 of 6</span>
-      <h2 id="step-title">Crack the eggs</h2>
-      <div id="pips" class="pips" aria-hidden="true"></div>
+    <header id="step-head" class="step" hidden>
+      <span id="step-count" class="step-count"></span>
+      <h2 id="step-title"></h2>
+      <div id="pips" class="pips" aria-hidden="true" hidden></div>
+      <svg id="ring" class="ring" viewBox="0 0 120 120" aria-hidden="true" hidden>
+        <circle class="track" cx="60" cy="60" r="50"/>
+        <circle class="sweet" cx="60" cy="60" r="50"/>
+        <circle class="arc" cx="60" cy="60" r="50"/>
+      </svg>
     </header>
     <div class="foot">
-      <p id="hint" class="hint">Pick up an egg and knock it on the edge of the bowl</p>
-      <button id="again" class="btn" hidden>Again</button>
+      <div id="tag" class="tag" hidden></div>
+      <div id="verdict" class="tag verdict" hidden></div>
+      <p id="hint" class="hint"></p>
+      <div id="buttons" class="row"></div>
     </div>
   </div>
 
+  <div id="bubble" class="bubble" hidden></div>
+
   <button id="mute" class="icon-btn" aria-label="Mute sound" aria-pressed="false" hidden>🔊</button>
+
+  <div id="book" class="overlay" hidden>
+    <div class="card">
+      <h2>Basque Cheesecake</h2>
+      <p class="muted">Creamy inside, burnt on top. Pick a flavour:</p>
+      <div id="book-flavors" class="chips"></div>
+      <button id="book-bake" class="btn btn-big">Bake!</button>
+      <button id="book-close" class="btn btn-ghost btn-small">Not now</button>
+    </div>
+  </div>
+
+  <div id="lightbox" class="overlay" hidden>
+    <div class="card">
+      <h3 id="lightbox-title"></h3>
+      <p id="lightbox-date" class="muted"></p>
+      <p>Chef cat says: <span id="lightbox-verdict" class="pill"></span></p>
+      <button id="lightbox-close" class="btn btn-small">Close</button>
+    </div>
+  </div>
 
   <div id="title" class="title-card">
     <div class="logo" aria-hidden="true">🍰</div>

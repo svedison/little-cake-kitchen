@@ -44,6 +44,11 @@ html, body {
 }
 .btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #e895a3; }
 .btn-big { font-size: 26px; padding: 18px 40px; border-radius: 28px; }
+.btn-small { font-size: 16px; padding: 10px 20px; }
+.btn-ghost { background: #fff; box-shadow: 0 5px 0 #e8d9c8; }
+.btn-ghost:active { box-shadow: 0 1px 0 #e8d9c8; }
+.row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.muted { color: #a07c6c; }
 
 .icon-btn {
   position: fixed;
@@ -74,7 +79,8 @@ html, body {
 .hud[hidden] { display: none; }
 .hud .btn { pointer-events: auto; }
 
-.step { text-align: center; }
+.step { text-align: center; min-height: 110px; }
+.step[hidden] { visibility: hidden; display: block; }
 .step-count {
   display: inline-block;
   font-size: 14px;
@@ -82,10 +88,13 @@ html, body {
   background: var(--butter);
   border-radius: 999px;
   padding: 4px 12px;
+  min-height: 1.2em;
 }
+.step-count:empty { display: none; }
 .step h2 { margin: 6px 0 8px; font-size: 28px; font-weight: 700; }
 
 .pips { display: flex; justify-content: center; gap: 8px; }
+.pips[hidden] { display: none; }
 .pips span {
   width: 14px;
   height: 14px;
@@ -95,6 +104,14 @@ html, body {
   transition: background 0.2s, transform 0.2s;
 }
 .pips span.on { background: var(--pink); transform: scale(1.15); }
+
+.ring { width: 64px; height: 64px; transform: rotate(-90deg); display: block; margin: 0 auto; }
+.ring[hidden] { display: none; }
+.ring circle { fill: none; stroke-width: 11; stroke-linecap: round; }
+.ring .track { stroke: rgba(255, 255, 255, 0.8); }
+.ring .sweet { stroke: var(--matcha); }
+.ring .arc { stroke: var(--pink); transition: stroke 0.15s; }
+.ring.in-sweet .arc { stroke: #7cc06a; }
 
 .foot {
   display: flex;
@@ -108,11 +125,103 @@ html, body {
   font-size: 17px;
   font-weight: 500;
   text-align: center;
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.78);
   border-radius: 16px;
   padding: 10px 16px;
   max-width: 320px;
 }
+.hint:empty, .hint[hidden] { display: none; }
+
+.tag {
+  font-size: 16px;
+  font-weight: 600;
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 16px;
+  box-shadow: 0 3px 0 #e8d9c8;
+}
+.tag[hidden] { display: none; }
+.verdict { font-size: 24px; padding: 10px 24px; animation: pop-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1); }
+
+@keyframes pop-in {
+  from { transform: scale(0.3); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* The cat's speech bubble, positioned over its head each frame */
+.bubble {
+  position: fixed;
+  z-index: 4;
+  pointer-events: none;
+  transform: translate(0, -70%);
+  max-width: 210px;
+  background: #fff;
+  color: var(--cocoa);
+  font-size: 16px;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: 16px;
+  box-shadow: 0 4px 0 #e8d9c8;
+}
+.bubble::after {
+  content: '';
+  position: absolute;
+  left: -9px;
+  bottom: 10px;
+  border: 9px solid transparent;
+  border-right-color: #fff;
+  border-left: 0;
+}
+.bubble[hidden] { display: none; }
+.bubble.pop { animation: pop-in 0.3s cubic-bezier(0.2, 1.4, 0.4, 1); }
+
+/* Overlays: the recipe book and the Shelf lightbox */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(107, 74, 58, 0.35);
+  padding: 16px;
+}
+.overlay[hidden] { display: none; }
+.card {
+  background: var(--cream);
+  border-radius: 24px;
+  padding: 24px 22px;
+  width: min(360px, 100%);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  box-shadow: 0 8px 0 #e8d9c8;
+}
+.card h2, .card h3 { margin: 0; }
+.card p { margin: 0; }
+
+.chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.chip {
+  font: 600 16px/1 var(--font);
+  color: var(--cocoa);
+  background: #fff;
+  border: 3px solid #fff;
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+.chip.on { border-color: var(--pink); background: #ffe3e8; }
+
+.pill {
+  display: inline-block;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 4px 12px;
+  background: var(--butter);
+}
+.pill-none { background: transparent; border: 2px dashed #d9c8b5; color: #a07c6c; font-weight: 500; }
 
 /* Title card */
 .title-card {

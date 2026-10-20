@@ -2,8 +2,10 @@
 // bowl (or drop it in) and the shell splits, the yolk plops in and the white pools.
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { Kitchen, P } from './kitchen';
-import { sound } from './sound';
+import { P, SLOT } from '../kitchen';
+import { sound } from '../sound';
+import type { PointerHandler } from '../input';
+import type { StepContext, StepRunner } from './step';
 
 const EGG_R = 0.021;            // half width
 const EGG_H = EGG_R * 1.33;     // half height
@@ -36,13 +38,6 @@ interface Debris {
   kind: 'shell' | 'yolk';
 }
 
-interface Ripple { x: number; y: number; t: number }
-
-export interface EggStepEvents {
-  onProgress(cracked: number, total: number): void;
-  onDone(): void;
-}
-
 /** An egg shape: a sphere pulled taller and tapered at the top. */
 function eggGeometry(r: number, thetaStart = 0, thetaLength = Math.PI) {
   const g = new THREE.SphereGeometry(r, 28, 20, 0, Math.PI * 2, thetaStart, thetaLength);
@@ -56,11 +51,11 @@ function eggGeometry(r: number, thetaStart = 0, thetaLength = Math.PI) {
   return g;
 }
 
-export class EggStep {
+export class EggStep implements StepRunner, PointerHandler {
   readonly total = 3;
   cracked = 0;
   landed = 0;
-  private done = false;
+  private finished = false;
   private eggs: Egg[] = [];
   private debris: Debris[] = [];
   private held: Egg | null = null;
@@ -72,94 +67,60 @@ export class EggStep {
   private readonly eggMat = new THREE.MeshStandardMaterial({ color: P.shell, roughness: 0.55 });
   private readonly yolkGeo = new THREE.SphereGeometry(0.016, 24, 16);
   private readonly yolkMat = new THREE.MeshStandardMaterial({ color: P.yolk, roughness: 0.3 });
-  private readonly pool: THREE.Mesh;
-  private readonly poolBase: Float32Array;
-  private ripples: Ripple[] = [];
-  private poolScale = 0;
-  private readonly cartonPos = new THREE.Vector3(0, 0, 0.16);
+  private readonly carton = new THREE.Group();
+  private cartonBody: RAPIER.RigidBody | null = null;
+  private readonly collisionHandler = (a: RAPIER.Collider, b: RAPIER.Collider) => this.onCollision(a, b);
 
-  constructor(private readonly k: Kitchen, private readonly events: EggStepEvents) {
-    this.holdY = k.bowl.rimY + EGG_H + 0.004;
-    this.addCarton();
-    for (let i = 0; i < this.total; i++) this.eggs.push(this.makeEgg(new THREE.Vector3((i - 1) * 0.062, 0.03 + EGG_H - 0.012, this.cartonPos.z)));
-
-    // The egg white: a disc on the bowl floor that grows with each egg and ripples when a yolk lands.
-    const geo = new THREE.RingGeometry(0.002, 0.078, 64, 20);
-    this.poolBase = Float32Array.from(geo.attributes.position.array as Float32Array);
-    this.pool = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: P.white, roughness: 0.2, transparent: true, opacity: 0.85 }));
-    this.pool.rotation.x = -Math.PI / 2;
-    this.pool.position.copy(k.bowl.center).add(new THREE.Vector3(0, k.bowl.floorY + 0.004, 0));
-    this.pool.visible = false;
-    this.pool.receiveShadow = true;
-    k.scene.add(this.pool);
-
-    const canvas = k.renderer.domElement;
-    canvas.addEventListener('pointerdown', (e) => this.onDown(e));
-    canvas.addEventListener('pointermove', (e) => this.onMove(e));
-    canvas.addEventListener('pointerup', (e) => this.onUp(e));
-    canvas.addEventListener('pointercancel', (e) => this.onUp(e));
-    k.onCollision.add((a, b) => this.onCollision(a, b));
-    k.updaters.add((dt, t) => this.update(dt, t));
+  constructor(private readonly ctx: StepContext) {
+    this.holdY = ctx.bowl.home.y + ctx.bowl.rimY + EGG_H + 0.004;
   }
 
-  /** Put all three eggs back in the carton and clear the bowl. */
-  reset() {
-    for (const d of this.debris) this.removeDebris(d);
-    this.debris = [];
-    for (const egg of this.eggs) {
-      if (egg.body) this.k.world.removeRigidBody(egg.body);
-      this.k.scene.remove(egg.mesh);
-    }
-    this.eggs = this.eggs.map((e) => this.makeEgg(e.slot));
-    this.held = null;
-    this.cracked = 0;
-    this.landed = 0;
-    this.done = false;
-    this.poolScale = 0;
-    this.pool.visible = false;
-    this.ripples = [];
-    this.events.onProgress(0, this.total);
+  start() {
+    const { k, hud, station } = this.ctx;
+    const cartonPos = k.at(SLOT.front, station);
+    this.addCarton(cartonPos);
+    for (let i = 0; i < this.total; i++) this.eggs.push(this.makeEgg(new THREE.Vector3(cartonPos.x + (i - 1) * 0.062, 0.03 + EGG_H - 0.012, cartonPos.z)));
+    k.pointer.handlers.unshift(this);
+    k.onCollision.add(this.collisionHandler);
+    hud.meter('pips');
+    hud.setPips(this.total, 0);
   }
 
-  /** Screen positions of things a test driver might want to touch. */
-  screen() {
-    const k = this.k;
+  /** World points a test driver can aim at. */
+  targets() {
+    const { bowl } = this.ctx;
     const dir = new THREE.Vector3(0, 0, 1); // the rim nearest the camera
-    const at = (r: number) => k.toScreen(k.bowl.center.clone().addScaledVector(dir, r).setY(this.holdY));
-    return {
-      eggs: this.eggs.map((e) => k.toScreen(e.pos)),
-      outside: at(k.bowl.rimRadius + 0.06),
-      inside: at(k.bowl.rimRadius - 0.06),
-      center: at(0),
-    };
+    const at = (r: number) => bowl.home.clone().addScaledVector(dir, r).setY(this.holdY);
+    const out: Record<string, THREE.Vector3> = { outside: at(bowl.rimRadius + 0.06), inside: at(bowl.rimRadius - 0.06), center: at(0) };
+    this.eggs.forEach((e, i) => { out[`egg${i}`] = e.pos.clone(); });
+    return out;
   }
 
   // ---- building ------------------------------------------------------------
 
-  private addCarton() {
-    const k = this.k;
-    const carton = new THREE.Group();
-    carton.position.copy(this.cartonPos);
+  private addCarton(at: THREE.Vector3) {
+    const { k } = this.ctx;
+    this.carton.position.copy(at);
     const base = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.03, 0.075), new THREE.MeshStandardMaterial({ color: 0xffcdd5, roughness: 0.95 }));
     base.position.y = 0.015;
     base.castShadow = true;
     base.receiveShadow = true;
-    carton.add(base);
+    this.carton.add(base);
     const cupMat = new THREE.MeshStandardMaterial({ color: 0xf7b9c4, roughness: 0.95 });
     for (let i = -1; i <= 1; i++) {
       const cup = new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.006, 10, 28), cupMat);
       cup.rotation.x = Math.PI / 2;
       cup.position.set(i * 0.062, 0.03, 0);
       cup.castShadow = true;
-      carton.add(cup);
+      this.carton.add(cup);
     }
-    k.scene.add(carton);
-    const body = k.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(this.cartonPos.x, 0.015, this.cartonPos.z));
-    k.world.createCollider(RAPIER.ColliderDesc.cuboid(0.105, 0.015, 0.0375), body);
+    k.scene.add(this.carton);
+    this.cartonBody = k.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(at.x, 0.015, at.z));
+    k.world.createCollider(RAPIER.ColliderDesc.cuboid(0.105, 0.015, 0.0375), this.cartonBody);
   }
 
   private makeEgg(slot: THREE.Vector3): Egg {
-    const k = this.k;
+    const { k } = this.ctx;
     const mesh = new THREE.Mesh(this.eggGeo, this.eggMat);
     mesh.castShadow = true;
     mesh.position.copy(slot);
@@ -174,35 +135,31 @@ export class EggStep {
 
   // ---- input ---------------------------------------------------------------
 
-  private onDown(e: PointerEvent) {
-    if (this.held || this.done) return;
-    this.pointer = { x: e.clientX, y: e.clientY };
+  down(x: number, y: number) {
+    if (this.held || this.finished) return false;
+    this.pointer = { x, y };
     let best: Egg | null = null;
     let bestD = GRAB_PX;
     for (const egg of this.eggs) {
       if (egg.state !== 'carton' && egg.state !== 'returning') continue;
-      const s = this.k.toScreen(egg.pos);
-      const d = Math.hypot(s.x - e.clientX, s.y - e.clientY);
+      const d = this.ctx.k.screenDist(x, y, egg.pos);
       if (d < bestD) { bestD = d; best = egg; }
     }
-    if (!best) return;
-    this.k.renderer.domElement.setPointerCapture(e.pointerId);
+    if (!best) return false;
     best.state = 'held';
     best.prevDist = this.distToBowl(best.pos);
     this.held = best;
+    return true;
   }
 
-  private onMove(e: PointerEvent) {
-    this.pointer = { x: e.clientX, y: e.clientY };
-  }
+  move(x: number, y: number) { this.pointer = { x, y }; }
 
-  private onUp(e: PointerEvent) {
+  up() {
     const egg = this.held;
     if (!egg) return;
     this.held = null;
-    try { this.k.renderer.domElement.releasePointerCapture(e.pointerId); } catch { /* already released */ }
     if (egg.state !== 'held') return;
-    const over = this.distToBowl(egg.pos) < this.k.bowl.rimRadius - 0.03;
+    const over = this.distToBowl(egg.pos) < this.ctx.bowl.rimRadius - 0.03;
     if (over && egg.body) {
       // Let go over the bowl: the egg really falls and cracks on whatever it hits.
       egg.state = 'falling';
@@ -218,7 +175,7 @@ export class EggStep {
 
   // ---- per frame -----------------------------------------------------------
 
-  private update(dt: number, t: number) {
+  update(dt: number, t: number) {
     for (const egg of this.eggs) {
       switch (egg.state) {
         case 'held': this.updateHeld(egg, dt, t); break;
@@ -232,13 +189,13 @@ export class EggStep {
       if (d.kind === 'shell' && d.age > 3) { this.removeDebris(d); return false; }
       return true;
     });
-    this.updatePool(dt);
   }
 
   private updateHeld(egg: Egg, dt: number, t: number) {
-    const target = this.k.pointOnPlane(this.k.ray(this.pointer.x, this.pointer.y), this.holdY);
+    const { k, bowl } = this.ctx;
+    const target = k.fingerAt(this.pointer.x, this.pointer.y, this.holdY);
     if (target) {
-      target.x = THREE.MathUtils.clamp(target.x, -0.3, 0.3);
+      target.x = THREE.MathUtils.clamp(target.x, bowl.home.x - 0.3, bowl.home.x + 0.3);
       target.z = THREE.MathUtils.clamp(target.z, -0.32, 0.3);
       egg.pos.lerp(target, 1 - Math.exp(-20 * dt));
     }
@@ -247,14 +204,14 @@ export class EggStep {
 
     // Crossing the rim band fast enough knocks the shell; slowly just touches it.
     const d = this.distToBowl(egg.pos);
-    const rim = this.k.bowl.rimRadius;
+    const rim = bowl.rimRadius;
     const enteredFromOutside = egg.prevDist > rim + RIM_BAND.outer && d <= rim + RIM_BAND.outer;
     const enteredFromInside = egg.prevDist < rim - RIM_BAND.inner && d >= rim - RIM_BAND.inner;
     egg.prevDist = d;
     if (enteredFromOutside || enteredFromInside) {
       const speed = Math.hypot(egg.vel.x, egg.vel.z);
       if (speed > KNOCK_SPEED) {
-        const inward = new THREE.Vector3(this.k.bowl.center.x - egg.pos.x, 0, this.k.bowl.center.z - egg.pos.z).normalize();
+        const inward = new THREE.Vector3(bowl.home.x - egg.pos.x, 0, bowl.home.z - egg.pos.z).normalize();
         this.crack(egg, egg.pos.clone(), inward);
         return;
       }
@@ -280,7 +237,7 @@ export class EggStep {
     const v = egg.body.linvel();
     egg.vel.set(v.x, v.y, v.z);
     // Safety net: if it somehow slips through the bowl, crack it where it is.
-    if (p.y < this.k.bowl.floorY - 0.03) this.crack(egg, egg.pos.clone(), null);
+    if (p.y < this.ctx.bowl.home.y + this.ctx.bowl.floorY - 0.03) this.crack(egg, egg.pos.clone(), null);
   }
 
   private updateReturning(egg: Egg, dt: number) {
@@ -295,7 +252,7 @@ export class EggStep {
   }
 
   private distToBowl(p: THREE.Vector3) {
-    return Math.hypot(p.x - this.k.bowl.center.x, p.z - this.k.bowl.center.z);
+    return Math.hypot(p.x - this.ctx.bowl.home.x, p.z - this.ctx.bowl.home.z);
   }
 
   // ---- cracking --------------------------------------------------------------
@@ -304,14 +261,14 @@ export class EggStep {
     if (egg.state === 'cracked') return;
     egg.state = 'cracked';
     egg.mesh.visible = false;
-    if (egg.body) this.k.world.removeRigidBody(egg.body);
+    if (egg.body) this.ctx.k.world.removeRigidBody(egg.body);
     egg.body = null;
     egg.collider = null;
     if (this.held === egg) this.held = null;
 
     sound.play('crack');
-    const bowl = this.k.bowl;
-    const away = new THREE.Vector3(at.x - bowl.center.x, 0, at.z - bowl.center.z).normalize();
+    const bowl = this.ctx.bowl;
+    const away = new THREE.Vector3(at.x - bowl.home.x, 0, at.z - bowl.home.z).normalize();
     if (!isFinite(away.x)) away.set(0, 0, 1);
     const side = new THREE.Vector3(-away.z, 0, away.x);
 
@@ -327,11 +284,12 @@ export class EggStep {
     this.spawnYolk(yolkPos, yolkVel);
 
     this.cracked++;
-    this.events.onProgress(this.cracked, this.total);
+    this.ctx.hud.setPips(this.total, this.cracked);
+    this.ctx.hud.hint(this.cracked === 1 ? 'Lovely! Two more.' : this.cracked === 2 ? 'One more!' : 'All in!');
   }
 
   private spawnShell(geo: THREE.BufferGeometry, pos: THREE.Vector3, vel: THREE.Vector3) {
-    const k = this.k;
+    const { k } = this.ctx;
     const mat = new THREE.MeshStandardMaterial({ color: P.shell, roughness: 0.55, side: THREE.DoubleSide, transparent: true });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true;
@@ -347,7 +305,7 @@ export class EggStep {
   }
 
   private spawnYolk(pos: THREE.Vector3, vel: THREE.Vector3) {
-    const k = this.k;
+    const { k } = this.ctx;
     const mesh = new THREE.Mesh(this.yolkGeo, this.yolkMat);
     mesh.castShadow = true;
     k.scene.add(mesh);
@@ -378,8 +336,8 @@ export class EggStep {
   }
 
   private removeDebris(d: Debris) {
-    this.k.world.removeRigidBody(d.body);
-    this.k.scene.remove(d.mesh);
+    this.ctx.k.world.removeRigidBody(d.body);
+    this.ctx.k.scene.remove(d.mesh);
     if (d.kind === 'shell') (d.mesh.material as THREE.Material).dispose();
   }
 
@@ -393,44 +351,27 @@ export class EggStep {
     if (d.kind === 'yolk') {
       d.squish = 1;
       sound.play('plop', { gain: 0.8 });
-      const local = this.pool.worldToLocal(d.mesh.position.clone());
-      this.ripples.push({ x: local.x, y: local.y, t: 0 });
+      this.ctx.bowl.ripple(d.mesh.position);
       this.landed++;
-      if (this.landed >= this.total && !this.done) {
-        this.done = true;
-        this.events.onDone();
+      if (this.landed >= this.total && !this.finished) {
+        this.finished = true;
+        this.ctx.done();
       }
     } else {
       sound.play('clink', { gain: 0.6 });
     }
   }
 
-  // ---- the white pooling in the bowl -----------------------------------------
-
-  private updatePool(dt: number) {
-    const target = this.landed === 0 ? 0 : 0.45 + 0.55 * (this.landed / this.total);
-    this.poolScale += (target - this.poolScale) * (1 - Math.exp(-4 * dt));
-    this.pool.visible = this.poolScale > 0.01;
-    if (!this.pool.visible) return;
-    this.pool.scale.setScalar(this.poolScale);
-
-    for (const r of this.ripples) r.t += dt;
-    this.ripples = this.ripples.filter((r) => r.t < 1.8);
-    const pos = this.pool.geometry.attributes.position as THREE.BufferAttribute;
-    const base = this.poolBase;
-    const s = this.poolScale;
-    for (let i = 0; i < pos.count; i++) {
-      const x = base[i * 3];
-      const y = base[i * 3 + 1];
-      let z = 0;
-      for (const r of this.ripples) {
-        const d = Math.hypot(x * s - r.x, y * s - r.y);
-        const front = 0.12 * r.t + 0.012;
-        if (d < front) z += 0.0035 * Math.exp(-2.6 * r.t) * Math.sin(180 * d - 22 * r.t) * (1 - d / front);
-      }
-      pos.setZ(i, z / Math.max(s, 0.01));
+  dispose() {
+    const { k, leftovers } = this.ctx;
+    k.pointer.handlers.splice(k.pointer.handlers.indexOf(this), 1);
+    k.onCollision.delete(this.collisionHandler);
+    for (const egg of this.eggs) { if (egg.body) k.world.removeRigidBody(egg.body); k.scene.remove(egg.mesh); }
+    for (const d of this.debris) {
+      if (d.kind === 'shell') this.removeDebris(d);
+      else leftovers.push({ mesh: d.mesh, body: d.body }); // yolks stay in the bowl until the recipe ends
     }
-    pos.needsUpdate = true;
-    if (this.ripples.length) this.pool.geometry.computeVertexNormals();
+    k.scene.remove(this.carton);
+    if (this.cartonBody) k.world.removeRigidBody(this.cartonBody);
   }
 }

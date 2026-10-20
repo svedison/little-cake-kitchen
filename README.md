@@ -2,7 +2,7 @@
 
 A cute, tactile 3D cake-baking game for the browser, made for Creme. One continuous kitchen, one finger, eggs that really crack and batter that really pours.
 
-**Status:** vertical slice. The title card, the counter, and one step: crack three eggs into the bowl.
+**Status:** the full Basque cheesecake, rough. Three Stations (Counter, Stove, Fridge) on a swipeable camera rail, the recipe book, all six steps with four gestures (tap, hold, drag, stir), the chef cat, the reveal with confetti, the taste test and verdict, and the Shelf of past cakes. Props and sounds are placeholders; polish comes next.
 
 ## Run it
 

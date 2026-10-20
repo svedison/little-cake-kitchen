@@ -1,16 +1,28 @@
-# Little Cake Kitchen 🍰
+# Creme's Kitchen 🍰
 
-A tiny, cozy browser game about making cakes. Pick a recipe, tap / hold / drag your way through the steps, then feed the finished cake to the chef cat and see what it thinks.
+A cute, tactile 3D cake-baking game for the browser, made for Creme. One continuous kitchen, one finger, eggs that really crack and batter that really pours.
 
-- **Three recipes:** Tiramisu, Basque Cheesecake (Classic, Blueberry, Lemon) and Cream Puff
-- **No fail state:** every cake is a success, the cat just rates it *bussin* 🔥 / *mid* 😐 / *ass* 💀
-- **Cake History:** every cake you've made, with the cat's verdict, saved in your browser
+**Status:** vertical slice. The title card, the counter, and one step: crack three eggs into the bowl.
 
-## Play
+## Run it
 
-Open `index.html` in any browser. Works on phones (portrait) and laptops. No install, no build step, no server.
+```
+npm install
+npm run dev
+```
 
-## Files
+Open the printed URL on your phone (same Wi-Fi) or laptop. Add `?fps` to the URL to see the frame rate.
 
-- `index.html`, `style.css`, `game.js` — the whole game, vanilla JS
-- `SPEC.md` — design notes and recipe details
+`npm run build` writes a static site to `dist/`; pushes to `main` deploy it to GitHub Pages.
+
+## Design
+
+- [SPEC.md](./SPEC.md): what the game is and the build order
+- [CONTEXT.md](./CONTEXT.md): the words we use (Kitchen, Station, Step, Gesture, Result, Shelf, Nudge)
+- [docs/adr](./docs/adr): the decisions behind the 3D rebuild
+
+The original 2D version lives in git history before the rebuild.
+
+## Stack
+
+three.js for rendering, Rapier for physics, TypeScript, Vite. No backend.

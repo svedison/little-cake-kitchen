@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Little Cake Kitchen</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <button id="sound-toggle" class="icon-btn" aria-label="Turn sound on" aria-pressed="false" title="Sound">🔇</button>
+
+  <!-- 1. Title -->
+  <section id="screen-title" class="screen active">
+    <div id="logo" class="logo"></div>
+    <h1 class="title">Little Cake<br>Kitchen</h1>
+    <p class="muted tagline">a cozy little baking game</p>
+    <p id="made-for" class="made-for" hidden></p>
+    <button class="btn btn-big" data-go="pick">Let's bake!</button>
+    <button class="btn btn-ghost" data-go="gallery">History</button>
+  </section>
+
+  <!-- 2. Recipe pick -->
+  <section id="screen-pick" class="screen">
+    <h2>What shall we make?</h2>
+    <div id="recipe-cards" class="cards"></div>
+    <button class="btn btn-ghost btn-small" data-go="title">Back</button>
+  </section>
+
+  <!-- 3. Baking -->
+  <section id="screen-bake" class="screen">
+    <header class="bake-head">
+      <span id="step-count" class="step-count"></span>
+      <h2 id="step-title" class="step-title"></h2>
+      <div id="step-dots" class="dots"></div>
+    </header>
+    <div id="play" class="play">
+      <div id="stage" class="stage"></div>
+      <div id="foot" class="foot"></div>
+    </div>
+    <button id="next-btn" class="btn btn-big" hidden>Next</button>
+    <button class="btn btn-ghost btn-small" data-go="pick">Back</button>
+  </section>
+
+  <!-- 4. Reveal -->
+  <section id="screen-reveal" class="screen">
+    <div id="confetti" class="confetti" aria-hidden="true"></div>
+    <h2 id="reveal-title">Ta-da!</h2>
+    <div id="reveal-cake" class="reveal-cake"></div>
+    <div id="cake-tag" class="tag"></div>
+    <p id="reveal-line" class="reveal-line"></p>
+    <p id="feed-hint" class="feed-hint">Drag the cake to the cat for a taste test!</p>
+    <div id="verdict" class="tag verdict" hidden></div>
+    <div class="row">
+      <button class="btn" data-go="pick">Bake another</button>
+      <button class="btn btn-ghost" data-go="gallery">History</button>
+    </div>
+  </section>
+
+  <!-- 5. Gallery -->
+  <section id="screen-gallery" class="screen">
+    <h2>Cake History</h2>
+    <p id="gallery-empty" class="muted">No cakes yet. Let's fix that!</p>
+    <div id="gallery-grid" class="grid"></div>
+    <button class="btn btn-ghost btn-small" data-go="title">Home</button>
+  </section>
+
+  <!-- Mascot (always visible) -->
+  <div id="mascot" class="mascot">
+    <div id="bubble" class="bubble"></div>
+    <div id="cat" class="cat"></div>
+  </div>
+
+  <!-- Gallery lightbox -->
+  <div id="lightbox" class="lightbox" hidden>
+    <div class="lightbox-card">
+      <div id="lightbox-cake" class="reveal-cake"></div>
+      <div id="lightbox-tag" class="tag"></div>
+      <p id="lightbox-verdict" class="lightbox-verdict"></p>
+      <button class="btn btn-small" id="lightbox-close">Close</button>
+    </div>
+  </div>
+
+</div>
+<script src="game.js"></script>
+</body>
+</html>

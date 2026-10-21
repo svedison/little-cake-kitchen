@@ -32,6 +32,17 @@ export interface StepRunner {
   dispose(): void;
   /** World points a test driver can aim at. */
   targets?(): Record<string, THREE.Vector3>;
+  /** How far along the Step's Hold or Stir is (0..1) and which stage it is in. */
+  progress?(): { progress: number; stage?: string };
+  /** The Hold meter behind progress(), if the Step has one. */
+  meterInfo?(): { duration: number; sweet: [number, number] };
+  /** Internal numbers worth seeing from a test driver; merged into __game.state(). */
+  debug?(): Record<string, unknown>;
+  /** The props this Step put in the Kitchen, by name, for overlap checks. */
+  boxes?(): Record<string, THREE.Object3D>;
+  /** Tidy the Step's props away with an animation before the next Step starts. */
+  leave?(): Promise<void>;
 }
 
-export const ease = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
+/** The Steps' ease lives in the motion toolkit now; re-exported so existing imports keep working. */
+export { ease } from '../motion';

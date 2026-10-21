@@ -6,13 +6,17 @@ import { Kitchen, P } from './kitchen';
 
 interface Ripple { x: number; y: number; t: number; amp: number }
 
+// The bowl is drawn at 85% of its first size so the cat and the front slot fit beside it on a phone.
+const SIZE = 0.85;
 // Inner profile of the bowl: height above the floor -> radius.
-const INNER: [number, number][] = [[0, 0.07], [0.044, 0.11], [0.089, 0.125]];
+const INNER: [number, number][] = [[0, 0.07 * SIZE], [0.044, 0.11 * SIZE], [0.089, 0.125 * SIZE]];
 
 export class Bowl {
   readonly group = new THREE.Group();
   readonly home: THREE.Vector3;
-  readonly rimRadius = 0.13;
+  readonly rimRadius = 0.135 * SIZE;
+  /** Non-physical decorations that ride along with the bowl (berries on the batter, lumps). */
+  readonly contents = new THREE.Group();
   readonly rimY = 0.095;
   readonly floorY = 0.006;
   readonly collider: RAPIER.Collider;
@@ -34,7 +38,7 @@ export class Bowl {
     const profile = [
       [0, 0], [0.08, 0], [0.12, 0.045], [0.135, 0.095],
       [0.125, 0.095], [0.11, 0.05], [0.07, 0.006], [0, 0.006],
-    ].map(([x, y]) => new THREE.Vector2(x, y));
+    ].map(([x, y]) => new THREE.Vector2(x * SIZE, y));
     const geo = new THREE.LatheGeometry(profile, 64);
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: P.matcha, roughness: 0.45, side: THREE.DoubleSide }));
     mesh.castShadow = true;
@@ -54,6 +58,7 @@ export class Bowl {
     this.surface.visible = false;
     this.surface.receiveShadow = true;
     this.group.add(this.surface);
+    this.group.add(this.contents);
 
     k.updaters.add((dt) => this.update(dt));
   }
@@ -93,6 +98,7 @@ export class Bowl {
     this.setLevel(0, true);
     this.ripples = [];
     this.spin = 0;
+    this.contents.clear();
   }
 
   private place() {

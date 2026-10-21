@@ -77,7 +77,7 @@ export class EggStep implements StepRunner, PointerHandler {
 
   start() {
     const { k, hud, station } = this.ctx;
-    const cartonPos = k.at(SLOT.front, station);
+    const cartonPos = k.at(SLOT.front, station); // the pan has left; the carton has the front slot to itself
     this.addCarton(cartonPos);
     for (let i = 0; i < this.total; i++) this.eggs.push(this.makeEgg(new THREE.Vector3(cartonPos.x + (i - 1) * 0.062, 0.03 + EGG_H - 0.012, cartonPos.z)));
     k.pointer.handlers.unshift(this);
@@ -93,6 +93,14 @@ export class EggStep implements StepRunner, PointerHandler {
     const at = (r: number) => bowl.home.clone().addScaledVector(dir, r).setY(this.holdY);
     const out: Record<string, THREE.Vector3> = { outside: at(bowl.rimRadius + 0.06), inside: at(bowl.rimRadius - 0.06), center: at(0) };
     this.eggs.forEach((e, i) => { out[`egg${i}`] = e.pos.clone(); });
+    out.pan = this.ctx.pan.position.clone(); // parked off screen; the driver checks it stays clear of the eggs
+    return out;
+  }
+
+  /** The carton and the uncracked eggs, for the test driver's overlap checks. */
+  boxes() {
+    const out: Record<string, THREE.Object3D> = { carton: this.carton };
+    this.eggs.forEach((e, i) => { if (e.state !== 'cracked') out[`egg${i}`] = e.mesh; });
     return out;
   }
 

@@ -37,6 +37,7 @@ export class BakeStep implements StepRunner, PointerHandler {
   private inside = new THREE.Vector3();
   private outPos = new THREE.Vector3();
   private dingDone = false;
+  private panArrived = false;
   private result: 'under' | 'right' | 'over' = 'right';
 
   constructor(private readonly ctx: StepContext) {}
@@ -50,8 +51,14 @@ export class BakeStep implements StepRunner, PointerHandler {
     this.fillMat = this.fill.material as THREE.MeshStandardMaterial;
     this.outPos = k.at(SLOT.front, station);
     this.inside = oven.position.clone().add(new THREE.Vector3(0, 0.038, 0.03));
-    pan.position.copy(this.outPos);
+    // The filled pan slides in from the Stove's park slot; it can be picked up once it is there.
+    pan.position.copy(k.at(SLOT.park, station));
+    pan.rotation.set(0, 0, 0);
     pan.visible = true;
+    k.glide(pan, this.outPos, 0.5).then(() => {
+      this.panArrived = true;
+      if (this.phase === 'carry') k.pointer.handlers.unshift(this.carry);
+    });
     this.carry = new Carry(k, [{ obj: pan, home: this.outPos.clone(), placed: false }], {
       holdY: 0.1,
       grabPx: 90,
@@ -66,7 +73,6 @@ export class BakeStep implements StepRunner, PointerHandler {
         return true;
       },
     });
-    k.pointer.handlers.unshift(this.carry);
     hud.meter('pips');
     hud.setPips(1, 0);
   }
@@ -184,4 +190,10 @@ export class BakeStep implements StepRunner, PointerHandler {
     const mouth = this.ctx.oven.position.clone().add(new THREE.Vector3(0, 0.1, 0.15));
     return { pan: this.ctx.pan.position.clone(), ovenMouth: mouth, anywhere: this.outPos.clone() };
   }
+
+  progress() { return { progress: this.meter.progress, stage: this.phase }; }
+
+  meterInfo() { return { duration: this.meter.duration, sweet: this.meter.sweet }; }
+
+  debug() { return { holding: this.holding, heat: this.heat, doorOpen: this.doorOpen, panArrived: this.panArrived, carrying: !!this.carry?.held }; }
 }

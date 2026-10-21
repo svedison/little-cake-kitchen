@@ -1,14 +1,20 @@
 // Step: pour in the cream, then the flour, then the flavour's add-in. Press and hold
 // anywhere: the current thing lifts over the bowl, tilts and pours while you hold.
+// Only one pourable is ever on the counter: each one slides in from the right, does its
+// job at the front slot, and slides off to the left before the next one arrives.
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { SLOT } from '../kitchen';
 import { HoldMeter } from '../gestures';
 import { Stream } from '../stream';
+import { motion, easeInOutCubic } from '../motion';
 import { makeJug, makeCup, makeBerryDish, makeLemon } from '../props';
 import { sound, type Loop, type LoopName } from '../sound';
 import type { PointerHandler } from '../input';
 import { ease, type StepContext, type StepRunner } from './step';
+
+/** waiting: hidden off to the right; arriving: sliding in; active: the one you pour; leaving: sliding off left. */
+type PourableState = 'waiting' | 'arriving' | 'active' | 'leaving' | 'gone';
 
 interface Pourable {
   name: string;
@@ -19,7 +25,12 @@ interface Pourable {
   level: number;       // how much it raises the bowl
   loop: LoopName | null;
   spout: THREE.Vector3; // local point the pour leaves from
+  state: PourableState;
 }
+
+const WINGS = 0.35;      // how far off to the side a pourable waits and leaves (off screen at every viewport)
+const SLIDE = 0.4;       // s, in and out
+const GAP = 0.15;        // s between one having left and the next appearing
 
 export class PourStep implements StepRunner, PointerHandler {
   private readonly items: Pourable[] = [];
@@ -36,6 +47,7 @@ export class PourStep implements StepRunner, PointerHandler {
   private startLevel = 0;
   private finished = false;
   private restPos = new THREE.Vector3();
+  private lastLeave: Promise<void> = Promise.resolve();
   private readonly collisionHandler = (a: RAPIER.Collider, b: RAPIER.Collider) => this.onCollision(a, b);
   private berryColliders = new Set<RAPIER.Collider>();
 
@@ -46,14 +58,17 @@ export class PourStep implements StepRunner, PointerHandler {
   start() {
     const { k, bowl, hud, flavor, station } = this.ctx;
     this.restPos = k.at(SLOT.front, station);
-    this.items.push(
-      { name: 'cream', obj: makeJug(), kind: 'liquid', stream: 0xfffaf2, radius: 0.007, level: 0.018, loop: 'pour', spout: new THREE.Vector3(0.036, 0.085, 0) },
-      { name: 'flour', obj: makeCup(), kind: 'flour', stream: 0xfffdf7, radius: 0.012, level: 0.01, loop: 'flour', spout: new THREE.Vector3(0.03, 0.058, 0) },
-    );
-    if (flavor.addIn === 'berries') this.items.push({ name: 'blueberries', obj: makeBerryDish(), kind: 'berries', stream: 0, radius: 0, level: 0.004, loop: null, spout: new THREE.Vector3(0.035, 0.03, 0) });
-    if (flavor.addIn === 'lemon') this.items.push({ name: 'lemon', obj: makeLemon(), kind: 'lemon', stream: 0xfbf3a8, radius: 0.003, level: 0.004, loop: 'pour', spout: new THREE.Vector3(0, 0.032, 0) });
-    for (const it of this.items) { it.obj.position.copy(this.restPos); it.obj.visible = false; k.scene.add(it.obj); }
-    this.items[0].obj.visible = true;
+    const add = (p: Omit<Pourable, 'state'>) => this.items.push({ ...p, state: 'waiting' });
+    add({ name: 'cream', obj: makeJug(), kind: 'liquid', stream: 0xfffaf2, radius: 0.007, level: 0.018, loop: 'pour', spout: new THREE.Vector3(0.036, 0.085, 0) });
+    add({ name: 'flour', obj: makeCup(), kind: 'flour', stream: 0xfffdf7, radius: 0.012, level: 0.01, loop: 'flour', spout: new THREE.Vector3(0.03, 0.058, 0) });
+    if (flavor.addIn === 'berries') add({ name: 'blueberries', obj: makeBerryDish(), kind: 'berries', stream: 0, radius: 0, level: 0.004, loop: null, spout: new THREE.Vector3(0.035, 0.03, 0) });
+    if (flavor.addIn === 'lemon') add({ name: 'lemon', obj: makeLemon(), kind: 'lemon', stream: 0xfbf3a8, radius: 0.003, level: 0.004, loop: 'pour', spout: new THREE.Vector3(0, 0.032, 0) });
+    for (const it of this.items) {
+      it.obj.position.copy(this.restPos).add(new THREE.Vector3(WINGS, 0, 0));
+      it.obj.visible = false;
+      k.scene.add(it.obj);
+    }
+    this.arrive(this.items[0]);
     this.startLevel = bowl.level;
     k.pointer.handlers.unshift(this);
     k.onCollision.add(this.collisionHandler);
@@ -68,6 +83,26 @@ export class PourStep implements StepRunner, PointerHandler {
   private hintFor() {
     const names: Record<string, string> = { cream: 'Hold to pour in the cream', flour: 'Hold to tip in the flour', blueberries: 'Hold to tumble in the blueberries', lemon: 'Hold to squeeze the lemon' };
     this.ctx.hud.hint(names[this.item.name]);
+  }
+
+  /** Slide a pourable in from the right wing to the front slot. */
+  private arrive(it: Pourable) {
+    it.state = 'arriving';
+    it.obj.visible = true;
+    it.obj.rotation.set(0, 0, 0);
+    this.ctx.k.glide(it.obj, this.restPos, SLIDE).then(() => { if (it.state === 'arriving') it.state = 'active'; });
+  }
+
+  /** Slide a finished pourable off to the left wing, righting it on the way, then hide it. */
+  private depart(it: Pourable) {
+    it.state = 'leaving';
+    const from = it.obj.position.clone();
+    const to = this.restPos.clone().add(new THREE.Vector3(-WINGS, 0.02, 0));
+    const rot = it.obj.rotation.clone();
+    return motion.tween(SLIDE, easeInOutCubic, (k) => {
+      it.obj.position.lerpVectors(from, to, k);
+      it.obj.rotation.set(rot.x * (1 - k), rot.y * (1 - k), rot.z * (1 - k));
+    }).then(() => { it.state = 'gone'; it.obj.visible = false; });
   }
 
   down() {
@@ -91,25 +126,35 @@ export class PourStep implements StepRunner, PointerHandler {
     this.loop = null;
     const result = this.meter.result();
     this.ctx.hud.setPips(this.items.length, this.index + 1);
+    this.lastLeave = this.depart(this.item);
+    // The next vessel starts upright and at rest, whatever the last one was doing.
+    this.holding = false;
+    this.lift = 0;
+    this.meter.progress = 0;
     if (this.index + 1 >= this.items.length) { this.finished = true; this.ctx.done(result); return; }
     this.index++;
-    this.meter.progress = 0;
     this.startLevel = this.ctx.bowl.level;
-    this.item.obj.visible = true;
+    const nextItem = this.item;
+    this.lastLeave.then(() => motion.delay(GAP)).then(() => this.arrive(nextItem));
     this.hintFor();
   }
 
   update(dt: number, t: number) {
-    const { k, bowl, hud } = this.ctx;
+    const { bowl, hud } = this.ctx;
     const it = this.item;
-    // Lift over the bowl while holding, settle back when not.
-    this.lift += ((this.holding ? 1 : 0) - this.lift) * (1 - Math.exp(-9 * dt));
-    const over = bowl.home.clone().add(new THREE.Vector3(0.07, bowl.rimY + 0.07, 0.04));
-    for (const other of this.items) if (other !== it) other.obj.position.copy(this.restPos);
-    it.obj.position.lerpVectors(this.restPos, over, ease(this.lift));
-    const tilt = it.kind === 'lemon' ? 0 : -1.15 * ease(this.lift);
-    it.obj.rotation.set(0, 0, tilt);
-    if (it.kind === 'lemon') it.obj.rotation.x = Math.PI * ease(this.lift); // flip cut side down
+    // Lift over the bowl while holding, settle back when not. A vessel still sliding in
+    // belongs to its tween until it has arrived.
+    const wantLift = this.holding && it.state === 'active';
+    this.lift += ((wantLift ? 1 : 0) - this.lift) * (1 - Math.exp(-9 * dt));
+    if (it.state === 'active') {
+      // Low over the near side of the rim, so the tilted jug stays under the step header,
+      // and centred on the bowl so its tipped body stays inside a 390 px screen (tuned by eye).
+      const over = bowl.home.clone().add(new THREE.Vector3(0, bowl.rimY + 0.03, 0.06));
+      it.obj.position.lerpVectors(this.restPos, over, ease(this.lift));
+      const tilt = it.kind === 'lemon' ? 0 : -1.15 * ease(this.lift);
+      it.obj.rotation.set(0, 0, tilt);
+      if (it.kind === 'lemon') it.obj.rotation.x = Math.PI * ease(this.lift); // flip cut side down
+    }
     const pouring = this.holding && this.lift > 0.85 && !this.finished;
 
     if (pouring) {
@@ -148,7 +193,7 @@ export class PourStep implements StepRunner, PointerHandler {
     if (!this.floor) {
       // Berries bounce on the batter, so give the surface a thin invisible floor.
       this.floor = k.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(bowl.home.x, bowl.surfaceY() - 0.004, bowl.home.z));
-      k.world.createCollider(RAPIER.ColliderDesc.cylinder(0.003, 0.11).setFriction(1.2), this.floor);
+      k.world.createCollider(RAPIER.ColliderDesc.cylinder(0.003, bowl.rimRadius - 0.02).setFriction(1.2), this.floor);
     }
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.008, 12, 10), new THREE.MeshStandardMaterial({ color: 0x5a4c9e, roughness: 0.5 }));
     mesh.castShadow = true;
@@ -170,6 +215,9 @@ export class PourStep implements StepRunner, PointerHandler {
     }
   }
 
+  /** The last vessel finishes sliding off before the Step is torn down. */
+  leave() { return this.lastLeave; }
+
   dispose() {
     const { k, leftovers } = this.ctx;
     k.pointer.handlers.splice(k.pointer.handlers.indexOf(this), 1);
@@ -182,6 +230,27 @@ export class PourStep implements StepRunner, PointerHandler {
   }
 
   targets() {
-    return { item: this.item.obj.position.clone(), anywhere: this.ctx.bowl.home.clone().setY(this.ctx.bowl.surfaceY()) };
+    const out: Record<string, THREE.Vector3> = { anywhere: this.ctx.bowl.home.clone().setY(this.ctx.bowl.surfaceY()) };
+    if (this.item.state === 'active') out.item = this.item.obj.position.clone();
+    out.pan = this.ctx.pan.position.clone(); // parked off screen; the driver checks it stays clear
+    return out;
+  }
+
+  progress() { return { progress: this.meter.progress, stage: this.finished ? 'done' : this.holding ? `pouring ${this.item.name}` : this.item.name }; }
+
+  meterInfo() { return { duration: this.meter.duration, sweet: this.meter.sweet }; }
+
+  debug() {
+    return {
+      item: this.index, itemState: this.item.state, lift: this.lift, holding: this.holding, streamFlow: this.stream.flow, berries: this.berries.length,
+      visible: this.items.filter((it) => it.obj.visible).map((it) => it.name),
+    };
+  }
+
+  boxes() {
+    const names: Record<string, string> = { cream: 'jug', flour: 'cup', blueberries: 'dish', lemon: 'lemon' };
+    const out: Record<string, THREE.Object3D> = {};
+    for (const it of this.items) if (it.obj.visible) out[names[it.name]] = it.obj;
+    return out;
   }
 }

@@ -3,7 +3,8 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Pointer } from './input';
-import { Rail } from './camera';
+import { Rail, STATION_X } from './camera';
+import { motion, easeInOutCubic } from './motion';
 
 export const P = {
   cream: 0xfff6e9,
@@ -21,15 +22,53 @@ export const P = {
   steel: 0xcdd3db,
 };
 
-/** Where things sit at a Station, relative to the Station's x. */
+/**
+ * Where things sit at a Station, relative to the Station's x. Nothing ever shares a slot:
+ * a prop that is not part of the current Step is parked off the right edge of the view.
+ */
 export const SLOT = {
-  bowl: new THREE.Vector3(0, 0, -0.06),
-  front: new THREE.Vector3(0, 0, 0.17),
+  // A touch right of centre so the cat fits on its left; the pan below it is still centred.
+  bowl: new THREE.Vector3(0.03, 0, -0.06),
+  front: new THREE.Vector3(0, 0, 0.15),
+  // Tuned by eye: a 390 px phone only shows |x| < 0.145 this close to the camera. A pan at
+  // frontRight just fits; a prop at frontLeft must be small (0.11 m) and sits a little back.
+  frontLeft: new THREE.Vector3(-0.085, 0, 0.12),
+  frontRight: new THREE.Vector3(0.03, 0, 0.15),
+  /** Behind the bowl on the right, where the view is wider: the parchment waits here. */
+  backRight: new THREE.Vector3(0.125, 0, -0.245),
   side: new THREE.Vector3(0.17, 0, 0.1),
-  cat: new THREE.Vector3(-0.135, 0, -0.25),
+  /** Off the right edge at every viewport; props slide in from and out to here. */
+  park: new THREE.Vector3(0.6, 0, 0.17),
+  /** Off the left edge, for the bowl once the cake is out. */
+  bowlAway: new THREE.Vector3(-0.55, 0, -0.06),
+  // Beside the bowl's back-left: both paws show past the rim, and the hat stays under the
+  // top edge of a landscape view (further back it is cut off). Tuned by eye.
+  cat: new THREE.Vector3(-0.125, 0, -0.13),
+  catStove: new THREE.Vector3(STATION_X.stove - 0.22, 0, -0.2),
 };
 
 export type CollisionHandler = (a: RAPIER.Collider, b: RAPIER.Collider) => void;
+
+/** Convex hull of 2D points (Andrew's monotone chain), counter-clockwise, no repeats. */
+function convexHull(pts: [number, number][]) {
+  const p = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (p.length < 3) return p;
+  const cross = (o: number[], a: number[], b: number[]) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: [number, number][] = [];
+  for (const q of p) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop();
+    lower.push(q);
+  }
+  const upper: [number, number][] = [];
+  for (let i = p.length - 1; i >= 0; i--) {
+    const q = p[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop();
+    upper.push(q);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
 
 const STEP = 1 / 60;
 
@@ -45,6 +84,10 @@ export class Kitchen {
   /** Smoothed frames per second, for tuning on a real phone. */
   fps = 60;
   time = 0;
+  /** Game seconds run this many times slower than real ones (`?slowmo=4`); for looking at pours. */
+  slowmo = Math.max(1, Number(new URLSearchParams(location.search).get('slowmo')) || 1);
+  /** The biggest camera jump (a move in one frame that no timeline or swipe explains) since resetRailStats(); a test driver watches it. */
+  railMaxStepDx = 0;
 
   private readonly events = new RAPIER.EventQueue(true);
   private readonly raycaster = new THREE.Raycaster();
@@ -121,12 +164,56 @@ export class Kitchen {
     return slot.clone().setX(slot.x + (station ?? 0));
   }
 
+  resetRailStats() { this.railMaxStepDx = 0; }
+
+  /** Slide a prop along the counter to a slot, easing in and out; resolves when it is there. */
+  glide(obj: THREE.Object3D, to: THREE.Vector3, seconds: number) {
+    const from = obj.position.clone();
+    const dest = to.clone();
+    return motion.tween(seconds, easeInOutCubic, (k) => { obj.position.lerpVectors(from, dest, k); });
+  }
+
+  /**
+   * World-space bounding box of an object's visible meshes and the screen rectangle they
+   * cover, in CSS pixels. Both come from every vertex: a tilted jug gets a tight box, and
+   * a round pan's rectangle is its real silhouette, not the projection of a box's corners
+   * (which would read 60 px too wide for a pan near the bottom of a phone screen).
+   */
+  boxOf(obj: THREE.Object3D) {
+    obj.updateWorldMatrix(true, true);
+    const box = new THREE.Box3();
+    const v = new THREE.Vector3();
+    const pts: [number, number][] = [];
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    obj.traverseVisible((c) => {
+      const mesh = c as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.geometry) return;
+      const pos = mesh.geometry.attributes.position as THREE.BufferAttribute | undefined;
+      if (!pos) return;
+      for (let i = 0; i < pos.count; i++) {
+        box.expandByPoint(v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld));
+        pts.push([v.x, v.z]);
+        const s = this.toScreen(v);
+        x0 = Math.min(x0, s.x); y0 = Math.min(y0, s.y); x1 = Math.max(x1, s.x); y1 = Math.max(y1, s.y);
+      }
+    });
+    if (box.isEmpty()) return null;
+    return {
+      world: { min: box.min.toArray(), max: box.max.toArray() },
+      screen: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 },
+      // Footprint on the counter: a round bowl and a round cat side by side have crossing
+      // boxes but separate hulls, so the driver tests hulls, not boxes, for "touching".
+      hull: convexHull(pts),
+    };
+  }
+
   private frame() {
     const now = performance.now();
-    const dt = Math.min((now - this.last) / 1000, 0.1);
+    const real = Math.min((now - this.last) / 1000, 0.1);
+    const dt = real / this.slowmo;
     this.last = now;
     this.time += dt;
-    this.fps += (1 / Math.max(dt, 1e-3) - this.fps) * 0.05;
+    this.fps += (1 / Math.max(real, 1e-3) - this.fps) * 0.05;
 
     this.acc += dt;
     let steps = 0;
@@ -143,9 +230,14 @@ export class Kitchen {
     }
     if (steps === 4) this.acc = 0; // tab was hidden; don't try to catch up
 
+    // A rail on a timeline or under a finger moves on purpose; any other move is a jump.
+    const railX = this.rail.x;
+    const deliberate = this.rail.moving;
     this.rail.update(dt);
+    if (!deliberate) this.railMaxStepDx = Math.max(this.railMaxStepDx, Math.abs(this.rail.x - railX));
     this.sun.position.set(this.rail.x + 0.45, 1.1, 0.55);
     this.sun.target.position.set(this.rail.x, 0, 0);
+    motion.update(dt);
     for (const u of this.updaters) u(dt, this.time);
     this.renderer.render(this.scene, this.camera);
   }
@@ -155,9 +247,8 @@ export class Kitchen {
     const h = window.innerHeight;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
-    // Portrait phones need a wider vertical field so the bowl and the front slot both fit.
-    this.camera.fov = this.camera.aspect < 0.75 ? 58 : this.camera.aspect < 1.2 ? 48 : 40;
     this.camera.updateProjectionMatrix();
+    // The rail owns the pose and the field of view; 6/5 is also where style.css lays the header top-left.
     this.rail.landscape = this.camera.aspect > 1.2;
     this.rail.update(0);
   }

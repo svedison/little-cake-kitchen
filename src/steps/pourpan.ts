@@ -22,6 +22,7 @@ export class PourPanStep implements StepRunner, PointerHandler {
   private fill!: THREE.Mesh;
   private fillMat!: THREE.MeshStandardMaterial;
   private rippleT = 0;
+  private panArrived = false;
 
   constructor(private readonly ctx: StepContext) {
     this.stream = new Stream(ctx.k.scene, BATTER[ctx.flavor.id] ?? BATTER.classic);
@@ -29,8 +30,11 @@ export class PourPanStep implements StepRunner, PointerHandler {
 
   start() {
     const { k, bowl, pan, hud, station, flavor } = this.ctx;
-    pan.position.copy(k.at(SLOT.front, station));
+    // The lined pan comes back from the park slot; nothing pours until it is in place.
+    pan.position.copy(k.at(SLOT.park, station));
+    pan.rotation.set(0, 0, 0);
     pan.visible = true;
+    k.glide(pan, k.at(SLOT.front, station), 0.5).then(() => { this.panArrived = true; });
     this.fill = pan.getObjectByName('fill') as THREE.Mesh;
     this.fillMat = this.fill.material as THREE.MeshStandardMaterial;
     this.fillMat.color.set(BATTER[flavor.id] ?? BATTER.classic);
@@ -59,13 +63,13 @@ export class PourPanStep implements StepRunner, PointerHandler {
 
   update(dt: number, t: number) {
     const { bowl, pan, hud } = this.ctx;
-    this.lift += ((this.holding ? 1 : 0) - this.lift) * (1 - Math.exp(-7 * dt));
+    this.lift += ((this.holding && this.panArrived ? 1 : 0) - this.lift) * (1 - Math.exp(-7 * dt));
     const e = ease(this.lift);
     // The bowl rises, slides toward the pan and tips forward.
     const up = bowl.home.clone().add(new THREE.Vector3(0, 0.11, 0.02));
     bowl.group.position.lerpVectors(bowl.home, up, e);
     bowl.group.rotation.x = 0.9 * e;
-    const pouring = this.holding && this.lift > 0.9 && !this.finished;
+    const pouring = this.holding && this.panArrived && this.lift > 0.9 && !this.finished;
     if (pouring) {
       this.meter.advance(dt);
       const lip = bowl.group.localToWorld(new THREE.Vector3(0, bowl.rimY, bowl.rimRadius - 0.01));
@@ -112,6 +116,12 @@ export class PourPanStep implements StepRunner, PointerHandler {
   targets() {
     return { anywhere: this.ctx.pan.position.clone(), pan: this.ctx.pan.position.clone() };
   }
+
+  progress() { return { progress: this.meter.progress, stage: this.finished ? 'done' : this.holding ? 'pouring' : 'idle' }; }
+
+  meterInfo() { return { duration: this.meter.duration, sweet: this.meter.sweet }; }
+
+  debug() { return { lift: this.lift, holding: this.holding, panArrived: this.panArrived, streamFlow: this.stream.flow, fillHeight: this.fillHeight() }; }
 }
 
 export { FLAVOR_TINT };

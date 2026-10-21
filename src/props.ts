@@ -20,6 +20,7 @@ export function makePan() {
   // Pale "steel": no environment map here, so real metalness just looks dark.
   const steel = mat(0xe3e8ee, { metalness: 0.1, roughness: 0.45 });
   const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.055, 48, 1, true), new THREE.MeshStandardMaterial({ color: 0xe3e8ee, metalness: 0.1, roughness: 0.45, side: THREE.DoubleSide }));
+  ring.name = 'ring';
   ring.position.y = 0.0275;
   const base = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.006, 48), steel);
   base.position.y = 0.003;
@@ -27,15 +28,16 @@ export function makePan() {
   clip.position.set(0.088, 0.03, 0);
   g.add(ring, base, clip);
 
-  // Parchment lining: a crinkly cone that appears once the pan is lined.
+  // Parchment lining: a crinkly cone that appears once the pan is lined. It flares from
+  // 0.068 to 0.079 and the crinkle adds at most 4.5%, so it never pokes through the 0.085 ring.
   const pts: THREE.Vector2[] = [];
-  for (let i = 0; i <= 8; i++) pts.push(new THREE.Vector2(0.07 + 0.012 * (i / 8), 0.007 + 0.065 * (i / 8)));
+  for (let i = 0; i <= 8; i++) pts.push(new THREE.Vector2(0.068 + 0.011 * (i / 8), 0.007 + 0.065 * (i / 8)));
   const lgeo = new THREE.LatheGeometry(pts, 40);
   const lp = lgeo.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < lp.count; i++) {
     const y = lp.getY(i);
     const a = Math.atan2(lp.getZ(i), lp.getX(i));
-    const k = 1 + (y / 0.07) * 0.035 * Math.sin(a * 9 + y * 60) + (y / 0.07) * 0.02 * Math.sin(a * 4);
+    const k = 1 + (y / 0.072) * 0.03 * Math.sin(a * 9 + y * 60) + (y / 0.072) * 0.015 * Math.sin(a * 4);
     lp.setX(i, lp.getX(i) * k);
     lp.setZ(i, lp.getZ(i) * k);
   }
@@ -194,35 +196,108 @@ export function makeOven() {
   return shadowed(g);
 }
 
-/** The fridge: a tall pastel box. */
+/** The fridge: a tall pastel box with a door seam, lit handles and two magnets. */
 export function makeFridge() {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.8, 0.4), mat(P.glass, { roughness: 0.5 }));
-  body.position.y = 0.4;
-  const seam = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.006, 0.004), mat(0xbfd4df));
-  seam.position.set(0, 0.55, 0.2);
-  const h1 = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.12, 0.012), mat(P.steel, { metalness: 0.5, roughness: 0.3 }));
-  h1.position.set(0.16, 0.66, 0.21);
-  const h2 = h1.clone();
-  h2.position.y = 0.42;
-  g.add(body, seam, h1, h2);
+  const w = 0.42, h = 0.8, d = 0.4;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(P.glass, { roughness: 0.5 }));
+  body.position.y = h / 2;
+  g.add(body);
+  // Freezer above, fridge below: a shallow groove across the front and a thin one up the hinge side.
+  const groove = mat(0xbfd4df);
+  const seam = new THREE.Mesh(new THREE.BoxGeometry(w, 0.006, 0.004), groove);
+  seam.position.set(0, 0.55, d / 2);
+  const hinge = new THREE.Mesh(new THREE.BoxGeometry(0.004, h - 0.02, 0.004), groove);
+  hinge.position.set(-w / 2 + 0.012, h / 2, d / 2);
+  g.add(seam, hinge);
+  for (const y of [0.66, 0.42]) {
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.12, 0.012), mat(P.steel, { metalness: 0.5, roughness: 0.3 }));
+    handle.position.set(0.16, y, d / 2 + 0.01);
+    // A pale strip down the lit edge of each handle reads as a highlight without an environment map.
+    const shine = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.1, 0.002), mat(0xffffff, { roughness: 0.2 }));
+    shine.position.set(-0.004, 0, 0.0065);
+    handle.add(shine);
+    g.add(handle);
+  }
+  // Two magnets on the door: a pink heart-ish blob and a butter dot.
+  const pink = new THREE.Mesh(new THREE.SphereGeometry(0.018, 16, 12), mat(P.pink, { roughness: 0.5 }));
+  pink.scale.set(1, 0.9, 0.35);
+  pink.position.set(-0.08, 0.36, d / 2 + 0.004);
+  const butter = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.008, 20), mat(P.butter, { roughness: 0.6 }));
+  butter.rotation.x = Math.PI / 2;
+  butter.position.set(-0.02, 0.3, d / 2 + 0.004);
+  g.add(pink, butter);
   return shadowed(g);
 }
 
-/** The Shelf: a little raised stand on the counter the finished cakes sit on. */
+/** The Shelf's measurements, shared with Game, which places the cakes on it. */
+export const SHELF = {
+  width: 0.46,
+  depth: 0.18,
+  /** Height of the plank's top above the counter. */
+  height: 0.07,
+  /** Height of the back row's riser above the plank. */
+  riser: 0.03,
+  /** Where each row stands, relative to the plank's centre. */
+  frontZ: 0.03,
+  backZ: -0.045,
+  /** Cakes per row, their scale and spacing: six 6 cm cakes with a finger's width between them. */
+  perRow: 6,
+  cakeScale: 0.33,
+  spacing: 0.072,
+};
+
+/** The Shelf: a low stand on the counter with a riser at the back, so two rows of cakes both show. */
 export function makeShelf() {
   const g = new THREE.Group();
-  const plank = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.016, 0.13), mat(0xe9c7a4, { roughness: 0.9 }));
+  const plank = new THREE.Mesh(new THREE.BoxGeometry(SHELF.width, 0.016, SHELF.depth), mat(0xe9c7a4, { roughness: 0.9 }));
   g.add(plank);
-  for (const x of [-0.22, 0.22]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.1, 0.1), mat(0xd9b48f));
-    leg.position.set(x, -0.05, 0);
+  for (const x of [-0.2, 0.2]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.018, SHELF.height - 0.008, 0.1), mat(0xd9b48f));
+    leg.position.set(x, -0.008 - (SHELF.height - 0.008) / 2, 0); // from under the plank down to the counter
     g.add(leg);
   }
-  const trim = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.01, 0.012), mat(P.pink));
-  trim.position.set(0, 0.012, 0.062);
+  const riser = new THREE.Mesh(new THREE.BoxGeometry(SHELF.width - 0.02, SHELF.riser, 0.07), mat(0xe3bd97, { roughness: 0.9 }));
+  riser.position.set(0, 0.008 + SHELF.riser / 2, SHELF.backZ);
+  g.add(riser);
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(SHELF.width, 0.01, 0.012), mat(P.pink));
+  trim.position.set(0, 0.012, SHELF.depth / 2 - 0.006);
   g.add(trim);
   return shadowed(g);
+}
+
+const tagTextures = new Map<string, THREE.CanvasTexture>();
+
+/** A little card with the cat's verdict, leaning on the front of a Shelf cake (world size 0.03 x 0.012). */
+export function makeVerdictTag(label: string, color: string, cakeScale: number) {
+  let tex = tagTextures.get(label + color);
+  if (!tex) {
+    const c = document.createElement('canvas');
+    c.width = 160;
+    c.height = 64;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#fffdf6';
+    g.beginPath();
+    g.roundRect(2, 2, 156, 60, 14);
+    g.fill();
+    g.fillStyle = color;
+    g.beginPath();
+    g.roundRect(8, 8, 144, 48, 10);
+    g.fill();
+    g.fillStyle = '#6b4a3a';
+    g.font = '600 30px Fredoka, system-ui, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(label, 80, 34);
+    tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tagTextures.set(label + color, tex);
+  }
+  const tag = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.012), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, side: THREE.DoubleSide }));
+  tag.name = 'tag';
+  // Built in world units: the cake it leans on is scaled down, so the tag scales back up.
+  tag.scale.setScalar(1 / cakeScale);
+  return tag;
 }
 
 /** The recipe book lying open on the counter. */

@@ -79,7 +79,8 @@ html, body {
 .hud[hidden] { display: none; }
 .hud .btn { pointer-events: auto; }
 
-.step { text-align: center; min-height: 110px; }
+/* Never under the mute button (44 px plus margins at the right edge); the viewport, not the padded HUD box, is the reference. */
+.step { text-align: center; min-height: 110px; max-width: calc(100vw - 120px); }
 .step[hidden] { visibility: hidden; display: block; }
 .step-count {
   display: inline-block;
@@ -92,6 +93,13 @@ html, body {
 }
 .step-count:empty { display: none; }
 .step h2 { margin: 6px 0 8px; font-size: 28px; font-weight: 700; }
+/* On a phone the longest title ("Cream, flour & blueberries", 264 px at 22 px) must stay on one
+   line and the ring under it a little smaller, so the header's box clears the cat's hat even while
+   the cat bounces. */
+@media (max-width: 480px) {
+  .step h2 { font-size: clamp(18px, 5.4vw, 22px); margin: 4px 0 6px; }
+  .ring { width: 80px; height: 80px; }
+}
 
 .pips { display: flex; justify-content: center; gap: 8px; }
 .pips[hidden] { display: none; }
@@ -105,14 +113,26 @@ html, body {
 }
 .pips span.on { background: var(--pink); transform: scale(1.15); }
 
-.ring { width: 64px; height: 64px; transform: rotate(-90deg); display: block; margin: 0 auto; }
+/* Wide screens look along the counter, with the cat and the bowl in the middle: the header moves to the top-left corner. */
+@media (min-aspect-ratio: 6/5) {
+  .hud { align-items: stretch; }
+  .step { text-align: left; margin-left: 24px; max-width: 360px; }
+  .pips { justify-content: flex-start; }
+  .ring { margin: 0; }
+}
+
+/* 88px reads from arm's length on a phone; the cocoa track shows the whole circle on the pink wall. */
+.ring { width: 88px; height: 88px; transform: rotate(-90deg); display: block; margin: 0 auto; overflow: visible; }
 .ring[hidden] { display: none; }
 .ring circle { fill: none; stroke-width: 11; stroke-linecap: round; }
-.ring .track { stroke: rgba(255, 255, 255, 0.8); }
+.ring .track { stroke: rgba(107, 74, 58, 0.25); }
 .ring .sweet { stroke: var(--matcha); }
 .ring .arc { stroke: var(--pink); transition: stroke 0.15s; }
 .ring.in-sweet .arc { stroke: #7cc06a; }
+.ring .ring-label { font: 600 15px/1 var(--font); fill: var(--cocoa); opacity: 0.75; transition: opacity 0.15s, fill 0.15s; }
+.ring.in-sweet .ring-label { opacity: 1; fill: #4f9a3c; }
 
+/* Hint, verdict and buttons; about 140 px tall when all three show. */
 .foot {
   display: flex;
   flex-direction: column;
@@ -131,6 +151,7 @@ html, body {
   max-width: 320px;
 }
 .hint:empty, .hint[hidden] { display: none; }
+.hint.pop { animation: pop-in 0.3s cubic-bezier(0.2, 1.4, 0.4, 1); }
 
 .tag {
   font-size: 16px;
@@ -174,6 +195,13 @@ html, body {
 }
 .bubble[hidden] { display: none; }
 .bubble.pop { animation: pop-in 0.3s cubic-bezier(0.2, 1.4, 0.4, 1); }
+/* Flipped to the left of the head: the tail points right. */
+.bubble.flip::after { left: auto; right: -9px; border-right: 0; border-left: 9px solid #fff; }
+/* Docked bottom-left while the cat is out of view: no tail, a little cat instead. */
+.bubble.docked::after { display: none; }
+.bubble.docked::before { content: '🐱'; margin-right: 6px; }
+/* Hiding is a 0.2 s shrink-and-fade (hud.ts marks it out of the way once it is done). */
+.bubble.away { opacity: 0; transform: translate(0, -70%) scale(0.8); transition: opacity 0.2s, transform 0.2s; }
 
 /* Overlays: the recipe book and the Shelf lightbox */
 .overlay {
@@ -250,8 +278,8 @@ html, body {
 
 #fps {
   position: fixed;
-  left: 8px;
-  top: 8px;
+  right: 8px;
+  bottom: 8px;
   z-index: 6;
   font: 600 13px/1 var(--font);
   background: rgba(255, 255, 255, 0.8);

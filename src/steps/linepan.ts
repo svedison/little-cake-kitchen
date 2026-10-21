@@ -16,11 +16,14 @@ export class LinePanStep implements StepRunner {
 
   start() {
     const { k, pan, station, hud } = this.ctx;
-    pan.position.copy(k.at(SLOT.front, station)).add(new THREE.Vector3(0.08, 0, 0));
+    // The pan slides in from the park slot to the front; the sheet waits behind the bowl on
+    // the right (a phone's view is too narrow at the front for both side by side).
+    pan.position.copy(k.at(SLOT.park, station));
     pan.rotation.set(0, 0, 0);
     pan.visible = true;
-    this.sheet.position.copy(k.at(SLOT.front, station)).add(new THREE.Vector3(-0.085, 0, 0.01));
-    this.sheet.scale.setScalar(0.8);
+    k.glide(pan, k.at(SLOT.front, station), 0.5);
+    this.sheet.position.copy(k.at(SLOT.backRight, station));
+    this.sheet.scale.setScalar(0.6);
     k.scene.add(this.sheet);
 
     this.carry = new Carry(k, [{ obj: this.sheet, home: this.sheet.position.clone(), placed: false }], {
@@ -61,6 +64,14 @@ export class LinePanStep implements StepRunner {
     }
   }
 
+  /** The lined pan slides off to the park slot; it comes back when the batter is ready. */
+  async leave() {
+    const { k, pan, station } = this.ctx;
+    pan.rotation.set(0, 0, 0);
+    await k.glide(pan, k.at(SLOT.park, station), 0.5);
+    pan.visible = false;
+  }
+
   dispose() {
     const { k } = this.ctx;
     k.pointer.handlers.splice(k.pointer.handlers.indexOf(this.carry), 1);
@@ -70,5 +81,10 @@ export class LinePanStep implements StepRunner {
 
   targets() {
     return { sheet: this.sheet.position.clone(), pan: this.ctx.pan.position.clone() };
+  }
+
+  boxes() {
+    const { pan } = this.ctx;
+    return { sheet: this.sheet, ring: pan.getObjectByName('ring')!, lining: pan.getObjectByName('lining')! };
   }
 }

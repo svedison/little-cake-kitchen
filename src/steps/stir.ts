@@ -118,4 +118,12 @@ export class StirStep implements StepRunner, PointerHandler {
     const { bowl } = this.ctx;
     return { bowl: bowl.home.clone().setY(bowl.surfaceY()) };
   }
+
+  progress() { return { progress: this.meter.progress, stage: this.finished ? 'done' : this.holding ? 'stirring' : 'idle' }; }
+
+  meterInfo() { return { duration: this.meter.duration, sweet: this.meter.sweet }; }
+
+  debug() { return { turns: this.stir.turns, stirSpeed: this.stir.speed, holding: this.holding }; }
+
+  boxes() { return { whisk: this.whisk }; }
 }

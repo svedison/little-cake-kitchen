@@ -154,6 +154,8 @@ export class PourPanStep implements StepRunner, PointerHandler {
     this.fill.scale.set(1, 0.001, 1);
     // what an earlier cake left in the fill goes
     for (const c of this.fill.children.filter((c) => c.name === 'berry')) this.fill.remove(c);
+    const crown = pan.getObjectByName('crown')!;
+    for (const c of crown.children.filter((c) => c.name === 'berry')) crown.remove(c);
     this.lip = this.fill.getObjectByName('fillLip') as THREE.Mesh;
     this.lip.visible = false;
     (this.lip.material as THREE.MeshStandardMaterial).color.set(this.batter).multiplyScalar(0.86); // a touch darker, like a crust forming

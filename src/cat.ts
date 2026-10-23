@@ -25,8 +25,6 @@ const TRAVEL = { time: 0.8, count: 3, height: 0.035 };
 const HOP = { time: 0.35, crouch: 0.08, land: 0.27, height: 0.02 };
 /** The cheer: two hops back to back with the ears going. */
 const CHEER_T = HOP.time * 2;
-/** At the Stove the cat sits turned a little toward the oven, so it is watching the window. */
-const STOVE_YAW = 0.35;
 /**
  * On a portrait phone the Stove view is no wider than the oven, so the cat sits on top of it
  * instead (a warm oven is a cat's favourite spot), at the back left beside the dial. Tuned
@@ -416,8 +414,9 @@ export class Cat {
     const stove = Math.abs(stationX - STATION_X.stove) < 1e-3;
     const counter = Math.abs(stationX - STATION_X.counter) < 1e-3;
     if (!stove && !counter) return;
-    const to = (stove ? (this.k.rail.landscape ? SLOT.catStove : ON_OVEN) : SLOT.cat).clone();
-    this.restYaw = stove ? (this.k.rail.landscape ? STOVE_YAW : 0.15) : 0;
+    // On top of the warm oven on every screen: beside it, a wide view's lean-in hides it behind the oven's side.
+    const to = (stove ? ON_OVEN : SLOT.cat).clone();
+    this.restYaw = stove ? 0.15 : 0;
     const from = this.group.position.clone();
     if (from.distanceTo(to) < 1e-3) return;
     this.pointing = null;

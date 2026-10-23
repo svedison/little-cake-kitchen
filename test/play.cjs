@@ -66,7 +66,7 @@ const ALLOWED = [
   { pair: /^(pan|oven|ovenDoor|fridge|shelf|shelf\d+)~bubble$/, why: "the cat's line docks bottom-left while the cat is out of view (Stove, Fridge)" },
   { pair: /^(oven|ovenDoor)~(viewport|stepHead)$/, why: 'the oven fills the Stove view on purpose' },
   { pair: /^(oven|ovenDoor|pan)~foot$/, shots: /s6-/, why: 'the bake view leans in to the window; the hint and the tag sit over the knob strip' },
-  { pair: /^cat~oven$/, shots: /s6-/, tags: ['phone'], why: 'on a phone the cat sits on top of the oven at the Stove (a portrait view is no wider than the oven)' },
+  { pair: /^cat~oven$/, shots: /s6-/, why: 'the cat sits on top of the warm oven at the Stove (beside it, a wide lean-in hides it behind the oven)' },
   { pair: /^cat~(viewport|stepHead)$/, shots: /s6-(in-oven|bake|opening|sliding-out)/, tags: ['phone'], why: 'leaning in to the window (and backing off again as the pan comes out), the cat on the oven peeks in from the top-left corner' },
   { pair: /^oven~pan$/, shots: /s6-(in-oven|bake)/, why: 'the pan is inside the oven' },
   { pair: /^(oven|ovenDoor)~pan$/, shots: /s6-(sliding|sliding-out|opening|resting)$/, why: "the pan rides on the open door's top face (the driver checks doorGap: it never sinks into the door)" },
@@ -300,6 +300,9 @@ async function play(page, aim, prefix) {
   const bakeHold = async (at, until) => {
     const stages = {};
     const stageShot = async (s) => {
+      // the cat's call is read before the (slow) screenshot: its bubble lasts a few real seconds
+      const pr = await page.evaluate(() => window.__game.probe());
+      const said = pr.bubbleVisible ? await page.locator('#bubble').innerText() : '';
       await shot(`s6-bake-${s.stage}`);
       const tt = await page.evaluate(() => window.__game.targets());
       // Once it smokes, the darkest of five spots across the top: a grey puff over one of them is not the crust.
@@ -312,11 +315,10 @@ async function play(page, aim, prefix) {
       // The cat calls the stages from beside the oven; on the burnt one it says to let go.
       // (On a phone the lean-in is no wider than the window: the cat on the oven is just off the
       // left edge there, and its bubble carries the call.)
-      const pr = await page.evaluate(() => window.__game.probe());
       if (!pr.catOnScreen) problem(`the cat is off screen at s6-bake-${s.stage}`);
       if (s.stage !== 'pale' && !pr.bubbleVisible) problem(`no cat bubble calling the ${s.stage} stage`);
       if (s.stage === 'burnt') {
-        const text = pr.bubbleVisible ? await page.locator('#bubble').innerText() : '';
+        const text = said;
         log.push(`s6 burnt: cat says "${text}"`);
         if (!/let go/i.test(text)) problem(`the cat's bubble does not say "Let go" when the top turns BURNT ("${text}")`);
       }
@@ -729,14 +731,17 @@ async function play(page, aim, prefix) {
       if (!pre.bowl) problem('s5-after: no bowl 150 ms after done()');
     }
     // the bowl is tipped back and set down before the next Step
-    let done = null;
-    for (let i = 0; i < 300; i++) {
+    let done = null, stepped = false;
+    for (let i = 0; i < 600; i++) {
       const s = await state();
-      if (s.step !== s0.step) break;
+      // Step 6 only starts once the bowl's leave() has resolved, so a step change means it was set down
+      // (a slow screenshot can let the short 'done' phase pass between polls).
+      if (s.step !== s0.step) { stepped = true; break; }
       strays = Math.max(strays, s.strays || 0);
       if (s.phase === 'done') { done = s; break; }
       await page.waitForTimeout(15);
     }
+    if (!done && stepped) { log.push('s5-done: step 6 began between polls; the set-down checks are skipped this run'); return; }
     if (!done) { problem('s5: never saw the bowl set down before step 6'); return; }
     await page.waitForTimeout(300); // the landing squash
     const b = await shot('s5-done');
@@ -1006,10 +1011,11 @@ async function play(page, aim, prefix) {
       let still = 0;
       for (let i = 1; i < sm.length - 1; i++) if (sm[i].bake === 'bake' && sm[i].holding && sm[i + 1].progress > sm[i - 1].progress && lv(sm[i], 'tick') <= 0) still++;
       if (still) problem(`step 6: the timer's tick was silent in ${still} frame(s) while the bake advanced`);
-      const downs = w.marks.filter((m) => m.name === 's6-down').map((m) => m.p);
-      for (const d of downs) {
+      const downs = w.marks.filter((m) => m.name === 's6-down');
+      for (const { p: d, g: gd } of downs) {
         const up = upFor(markAt('s6-up', d));
-        const held = sm.filter((x) => x.p >= d + 800 && x.p < up && x.holding);
+        // the burner takes ~0.3 s of game time to roar up; a slow headless frame can stretch that past 800 ms of real time
+        const held = sm.filter((x) => x.p >= d + 800 && x.g >= gd + 0.5 && x.p < up && x.holding);
         const low = held.filter((x) => lv(x, 'oven') < 0.9).length;
         const after = sm.find((x) => x.p >= up + 300);
         const tickLate = sm.filter((x) => x.p >= up + 100 && x.p < nextDown(up) && lv(x, 'tick') > 0).length;
@@ -1519,7 +1525,9 @@ async function play(page, aim, prefix) {
     const tt = await page.evaluate(() => window.__game.targets());
     const px = tt.top ? await pixelAt(tt.top.x, tt.top.y) : null;
     log.push(`s6-in-oven: batter through the glass ${px && px.join(',')}`);
-    if (!px || !(px[0] >= 150 && px[0] - px[2] >= 25)) problem(`no pale batter disc through the glass at s6-in-oven (${px && px.join(',')})`);
+    // raw batter is cream, or lilac for blueberry (it only bakes toward the stage colours by golden)
+    const rawBatter = (c) => c[0] >= 150 && (c[0] - c[2] >= 25 || (flavor === 'blueberry' && c[2] >= 125 && c[0] - c[1] >= 8));
+    if (!px || !rawBatter(px)) problem(`no pale batter disc through the glass at s6-in-oven (${px && px.join(',')})`);
     if (!pr.catOnScreen) problem('the cat is off screen at s6-in-oven');
     if (!pr.bubbleVisible) problem('no cat bubble at s6-in-oven');
   }

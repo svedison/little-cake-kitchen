@@ -448,6 +448,7 @@ export class Game {
       this.transition = 'react';
       sound.play('chip', { gain: 0.25, rate: 1.4 }); // a tiny tick: that Step is done
       this.cueNow = null;
+      this.hud.hint(''); // a finished Step's instruction (or its "a little more!") never outlives it
       this.cat.release();
       this.cat.hop();
       this.k.pointer.handlers.unshift(this.freeze);

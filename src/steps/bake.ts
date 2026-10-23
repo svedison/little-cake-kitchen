@@ -7,6 +7,7 @@
 // rolls out, the pan slides out onto the door and rests there while a pill names the stage.
 import * as THREE from 'three';
 import { SLOT } from '../kitchen';
+import { PAN, BERRY_R } from '../props';
 import type { Pose } from '../camera';
 import { Carry, HoldMeter } from '../gestures';
 import { ParticlePool } from '../particles';
@@ -278,6 +279,12 @@ export class BakeStep implements StepRunner, PointerHandler {
   private outPos = new THREE.Vector3();
   private readonly color = new THREE.Color();
   private readonly v = new THREE.Vector3();
+  /** The flavour's batter as the pour left it: the top starts from it and bakes toward the stages' colours. */
+  private readonly batter = new THREE.Color();
+  /** The berries the pour left in the batter, moved onto the crown so they ride its top through the bake. */
+  private readonly berries: THREE.Mesh[] = [];
+  /** The pan is down on the counter after the bake and the door has been told to shut. */
+  private landed = false;
   private readonly w = new THREE.Vector3();
 
   constructor(private readonly ctx: StepContext) {}
@@ -293,6 +300,7 @@ export class BakeStep implements StepRunner, PointerHandler {
     this.pointer = oven.getObjectByName('pointer')!;
     this.fill = pan.getObjectByName('fill') as THREE.Mesh;
     this.fillMat = this.fill.material as THREE.MeshStandardMaterial;
+    this.batter.copy(this.fillMat.color);
     this.crown = pan.getObjectByName('crown')!;
     this.dome = pan.getObjectByName('dome') as THREE.Mesh;
     this.domeMat = this.dome.material as THREE.MeshStandardMaterial;
@@ -430,6 +438,7 @@ export class BakeStep implements StepRunner, PointerHandler {
           this.phase = 'sliding';
           this.animT = 0;
           this.crown.visible = true;
+          this.berriesOntoCrown();
           this.applyLook(0);
         }
         break;
@@ -515,12 +524,14 @@ export class BakeStep implements StepRunner, PointerHandler {
       case 'leaving': {
         // Lifted off the door onto the counter in front, then the door swings shut behind it.
         this.animT += dt;
-        if (this.animT <= BEAT.toCounter) {
-          const u = easeInOutCubic(this.animT / BEAT.toCounter);
+        if (!this.landed) {
+          const u = easeInOutCubic(Math.min(1, this.animT / BEAT.toCounter));
           pan.position.lerpVectors(this.from, this.counter, u);
           pan.position.y += Math.sin(u * Math.PI) * 0.04;
           pan.rotation.x = (this.doorAngle - Math.PI / 2) * (1 - u);
-          if (this.animT + dt > BEAT.toCounter) {
+          // (on the frame it gets there, however long that frame was: the door must always be shut after it)
+          if (u >= 1) {
+            this.landed = true;
             pan.position.copy(this.counter);
             pan.rotation.set(0, 0, 0);
             motion.squash(pan, 0.08, 0.2);
@@ -709,6 +720,8 @@ export class BakeStep implements StepRunner, PointerHandler {
   /** Colour, rise and scorch patches for a progress; dt > 0 eases the colour change over ~0.1 s. */
   private applyLook(p: number, dt = 0) {
     const look = bakeLook(p);
+    // Raw batter keeps its own colour (blueberry is lilac) and bakes toward the stage colours by golden.
+    look.top.lerpColors(this.batter, look.top, THREE.MathUtils.smoothstep(p, 0.05, BAKE.stages[1].until));
     const k = dt > 0 ? 1 - Math.exp(-25 * dt) : 1;
     this.color.copy(this.domeMat.color).lerp(look.top, k);
     this.domeMat.color.copy(this.color);
@@ -722,6 +735,23 @@ export class BakeStep implements StepRunner, PointerHandler {
     this.patchMat.color.copy(look.patch);
     this.patchMat.opacity = look.patchOpacity;
     for (const c of this.dome.children) c.visible = look.patchOpacity > 0.01;
+    // The berries sit half sunk in the dome's skin as it rises.
+    const R = PAN.fillR, hy = 0.22 * look.puff * R;
+    for (const b of this.berries) {
+      const r = Math.min(Math.hypot(b.position.x, b.position.z), R);
+      b.position.y = this.dome.position.y + hy * Math.sqrt(1 - (r / R) ** 2) - BERRY_R * 0.35;
+    }
+  }
+
+  /** The pour's berries are children of the fill, under where the crown now lies: they move onto the crown's top. */
+  private berriesOntoCrown() {
+    if (this.berries.length) return;
+    for (const b of this.fill.children.filter((c) => c.name === 'berry') as THREE.Mesh[]) {
+      this.crown.attach(b);
+      b.quaternion.identity();
+      b.scale.set(1, 1, 1);
+      this.berries.push(b);
+    }
   }
 
   /** The knob and the thermometer's pointer at a heat (0..1): up as she holds, back down when she lets go. */
@@ -883,6 +913,6 @@ const FOCUS: Record<'portrait' | 'landscape', Record<'door' | 'window', Pose>> =
   },
   landscape: {
     door: { y: 0.48, z: 0.86, lookY: 0.1, lookZ: -0.05 },
-    window: { y: 0.36, z: 0.62, lookY: 0.15, lookZ: -0.05, fov: 30 },
+    window: { y: 0.39, z: 0.74, lookY: 0.2, lookZ: -0.05, fov: 30 }, // backed off and looking up so the cat on the oven stays whole
   },
 };

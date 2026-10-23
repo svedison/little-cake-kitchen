@@ -42,7 +42,6 @@ export const SLOT = {
   // Behind the bowl's back-left with a gap to its rim: both paws show past it, and the hat
   // stays under the step header on a phone even mid-hop (further back it is not). Tuned by eye.
   cat: new THREE.Vector3(-0.14, 0, -0.15),
-  catStove: new THREE.Vector3(STATION_X.stove - 0.22, 0, -0.2),
 };
 
 export type CollisionHandler = (a: RAPIER.Collider, b: RAPIER.Collider) => void;

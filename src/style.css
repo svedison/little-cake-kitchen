@@ -103,7 +103,7 @@ html, body {
 .step-count:empty { display: none; }
 .step h2 { margin: 6px 0 8px; font-size: 28px; font-weight: 700; white-space: nowrap; }
 /* A new title pops in while the old one (a copy, .ghost) slides up and fades in 0.15 s. */
-.step h2.pop { animation: title-in 0.32s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+.step h2.pop { animation: title-in 0.32s cubic-bezier(0.2, 1.4, 0.4, 1) 0.12s both; } /* starts as the old one has nearly gone, so the two never read on top of each other */
 .step .ghost { position: absolute; left: 0; right: 0; margin-top: 0; pointer-events: none; animation: title-out 0.15s ease-in both; }
 .step-count.bounce { animation: bounce 0.35s cubic-bezier(0.2, 1.4, 0.4, 1); }
 @keyframes title-in {

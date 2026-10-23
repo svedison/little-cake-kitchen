@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#fff6e9"/>
+  <circle cx="256" cy="268" r="200" fill="#ffe4e8"/>
+  <!-- plate -->
+  <ellipse cx="256" cy="392" rx="170" ry="34" fill="#ffb6c1"/>
+  <ellipse cx="256" cy="386" rx="150" ry="24" fill="#ffd0d8"/>
+  <!-- ears -->
+  <path d="M150 196 L172 108 L232 170 Z" fill="#f6dcc0" stroke="#6b4a3a" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M362 196 L340 108 L280 170 Z" fill="#f6dcc0" stroke="#6b4a3a" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M168 176 L178 134 L208 166 Z" fill="#ffb6c1"/>
+  <path d="M344 176 L334 134 L304 166 Z" fill="#ffb6c1"/>
+  <!-- cake body -->
+  <path d="M126 200 Q126 180 146 180 L366 180 Q386 180 386 200 L386 360 Q386 384 256 384 Q126 384 126 360 Z" fill="#ffe8a3" stroke="#6b4a3a" stroke-width="10" stroke-linejoin="round"/>
+  <!-- frosting with drips -->
+  <path d="M126 200 Q126 176 150 176 L362 176 Q386 176 386 200 L386 226 Q372 246 360 226 Q348 206 334 232 Q320 262 304 232 Q292 212 276 236 Q262 256 248 232 Q234 210 218 238 Q204 262 190 232 Q178 210 164 234 Q148 254 138 230 Q126 214 126 222 Z" fill="#ffb6c1" stroke="#6b4a3a" stroke-width="10" stroke-linejoin="round"/>
+  <!-- face -->
+  <ellipse cx="206" cy="292" rx="14" ry="18" fill="#6b4a3a"/>
+  <ellipse cx="306" cy="292" rx="14" ry="18" fill="#6b4a3a"/>
+  <circle cx="211" cy="285" r="5" fill="#fff"/>
+  <circle cx="311" cy="285" r="5" fill="#fff"/>
+  <path d="M246 312 L266 312 L256 324 Z" fill="#ff8fa3" stroke="#6b4a3a" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M232 330 Q244 344 256 328 Q268 344 280 330" fill="none" stroke="#6b4a3a" stroke-width="7" stroke-linecap="round"/>
+  <ellipse cx="176" cy="324" rx="18" ry="10" fill="#ffb6c1" opacity="0.8"/>
+  <ellipse cx="336" cy="324" rx="18" ry="10" fill="#ffb6c1" opacity="0.8"/>
+  <!-- whiskers -->
+  <path d="M120 300 L168 308 M122 326 L166 322 M392 300 L344 308 M390 326 L346 322" stroke="#6b4a3a" stroke-width="6" stroke-linecap="round"/>
+  <!-- cherry -->
+  <circle cx="256" cy="160" r="24" fill="#ff7f96" stroke="#6b4a3a" stroke-width="8"/>
+  <path d="M256 138 Q262 110 284 100" fill="none" stroke="#6b4a3a" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="248" cy="152" r="6" fill="#fff" opacity="0.8"/>
+</svg>

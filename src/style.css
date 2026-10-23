@@ -1,3 +1,8 @@
+/* Fredoka, self-hosted (SIL OFL, see public/fonts/OFL.txt); system-ui shows until it arrives. */
+@font-face { font-family: 'Fredoka'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/fredoka-400.woff2') format('woff2'); }
+@font-face { font-family: 'Fredoka'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/fredoka-600.woff2') format('woff2'); }
+@font-face { font-family: 'Fredoka'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/fredoka-700.woff2') format('woff2'); }
+
 :root {
   --cream: #fff6e9;
   --pink: #ffb6c1;
@@ -28,6 +33,7 @@ html, body {
   height: 100%;
   display: block;
   touch-action: none;
+  -webkit-touch-callout: none; /* a long press (a Hold) never opens the iOS image menu */
 }
 
 /* Buttons */
@@ -40,9 +46,12 @@ html, body {
   padding: 14px 28px;
   box-shadow: 0 5px 0 #e895a3;
   cursor: pointer;
+  touch-action: manipulation; /* no double-tap zoom delay on a quick second tap */
   transition: transform 0.08s, box-shadow 0.08s;
 }
 .btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #e895a3; }
+/* Not ready yet (the kitchen is still loading): pressed flat and faded, so it reads as "wait". */
+.btn:disabled { opacity: 0.55; box-shadow: none; transform: translateY(4px); cursor: default; }
 .btn-big { font-size: 26px; padding: 18px 40px; border-radius: 28px; }
 .btn-small { font-size: 16px; padding: 10px 20px; }
 .btn-ghost { background: #fff; box-shadow: 0 5px 0 #e8d9c8; }
@@ -80,7 +89,7 @@ html, body {
 .hud .btn { pointer-events: auto; }
 
 /* Never under the mute button (44 px plus margins at the right edge); the viewport, not the padded HUD box, is the reference. */
-.step { text-align: center; min-height: 110px; max-width: calc(100vw - 120px); }
+.step { position: relative; text-align: center; min-height: 110px; max-width: calc(100vw - 120px); }
 .step[hidden] { visibility: hidden; display: block; }
 .step-count {
   display: inline-block;
@@ -92,8 +101,25 @@ html, body {
   min-height: 1.2em;
 }
 .step-count:empty { display: none; }
-.step h2 { margin: 6px 0 8px; font-size: 28px; font-weight: 700; }
-/* On a phone the longest title ("Cream, flour & blueberries", 264 px at 22 px) must stay on one
+.step h2 { margin: 6px 0 8px; font-size: 28px; font-weight: 700; white-space: nowrap; }
+/* A new title pops in while the old one (a copy, .ghost) slides up and fades in 0.15 s. */
+.step h2.pop { animation: title-in 0.32s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+.step .ghost { position: absolute; left: 0; right: 0; margin-top: 0; pointer-events: none; animation: title-out 0.15s ease-in both; }
+.step-count.bounce { animation: bounce 0.35s cubic-bezier(0.2, 1.4, 0.4, 1); }
+@keyframes title-in {
+  from { transform: translateY(8px) scale(0.85); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes title-out {
+  from { transform: none; opacity: 1; }
+  to { transform: translateY(-14px); opacity: 0; }
+}
+@keyframes bounce {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+/* On a phone the longest title ("Mix cream cheese & sugar"; recipes.ts keeps titles to 24 characters) must stay on one
    line and the ring under it a little smaller, so the header's box clears the cat's hat even while
    the cat bounces. */
 @media (max-width: 480px) {
@@ -112,6 +138,16 @@ html, body {
   transition: background 0.2s, transform 0.2s;
 }
 .pips span.on { background: var(--pink); transform: scale(1.15); }
+.pips.meter-in { animation: meter-in 0.3s cubic-bezier(0.2, 1.4, 0.4, 1); }
+.pips span.fill { animation: pip-fill 0.3s cubic-bezier(0.2, 1.4, 0.4, 1); }
+@keyframes meter-in {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes pip-fill {
+  from { transform: scale(0.6); }
+  to { transform: scale(1.15); }
+}
 
 /* Wide screens look along the counter, with the cat and the bowl in the middle: the header moves to the top-left corner. */
 @media (min-aspect-ratio: 6/5) {
@@ -129,8 +165,46 @@ html, body {
 .ring .sweet { stroke: var(--matcha); }
 .ring .arc { stroke: var(--pink); transition: stroke 0.15s; }
 .ring.in-sweet .arc { stroke: #7cc06a; }
-.ring .ring-label { font: 600 15px/1 var(--font); fill: var(--cocoa); opacity: 0.75; transition: opacity 0.15s, fill 0.15s; }
-.ring.in-sweet .ring-label { opacity: 1; fill: #4f9a3c; }
+/* The ring keeps its quarter turn (its arcs start at 12 o'clock) through both animations. */
+.ring.meter-in { animation: ring-in 0.3s cubic-bezier(0.2, 1.4, 0.4, 1); }
+.ring.in-sweet { animation: sweet-pulse 0.6s ease-out; }
+@keyframes ring-in {
+  from { transform: rotate(-90deg) scale(0.6); opacity: 0; }
+  to { transform: rotate(-90deg) scale(1); opacity: 1; }
+}
+@keyframes sweet-pulse {
+  0% { transform: rotate(-90deg) scale(1); }
+  30% { transform: rotate(-90deg) scale(1.12); }
+  100% { transform: rotate(-90deg) scale(1); }
+}
+/* The heart on the sweet wedge marks where to stop; it swells and goes pink once the arc reaches it. */
+.ring .ring-heart path { fill: #fff; stroke: #4f9a3c; stroke-width: 1.6; stroke-linejoin: round; transition: fill 0.15s; }
+.ring.in-sweet .ring-heart path { fill: var(--pink); stroke: #fff; }
+
+/* The bake gauge, the bake's one judge: the four stages as bands in the top's own colours, a
+   label under each, the goal (BURNT) ringed in pink with "let go here" over it, and a cocoa
+   needle that walks along with the hold. ~56 px tall, so the header still clears the cat. */
+.bake { position: relative; width: min(260px, calc(100vw - 150px)); margin: 2px auto 0; padding: 24px 14px 4px; background: rgba(255, 246, 233, 0.94); border-radius: 16px; box-shadow: 0 2px 8px rgba(107, 74, 58, 0.18); }
+.bake .track { position: relative; }
+.bake[hidden] { display: none; }
+.bake .bar { display: flex; height: 20px; border-radius: 999px; border: 3px solid #fff; box-shadow: 0 0 0 2px var(--cocoa); overflow: hidden; background: #fff; }
+.bake .band { height: 100%; }
+.bake .band + .band { border-left: 2px solid #fff; }
+.bake .goal-ring { position: absolute; top: -4px; height: 32px; border: 3px solid #e0607e; border-radius: 12px; box-sizing: border-box; pointer-events: none; }
+.bake .goal-top { position: absolute; top: -22px; transform: translateX(-50%); font: 700 14px/1 var(--font); color: #e0607e; white-space: nowrap; }
+.bake .labels { position: relative; height: 18px; margin-top: 4px; }
+.bake .labels span { position: absolute; top: 0; transform: translateX(-50%); font: 500 14px/1.2 var(--font); color: var(--cocoa); opacity: 0.75; white-space: nowrap; transition: opacity 0.15s, transform 0.15s; }
+.bake .goal-top.on { transform: translateX(-50%) scale(1.12); }
+.bake .labels span.on { opacity: 1; font-weight: 700; transform: translateX(-50%) scale(1.15); }
+.bake .needle { position: absolute; top: -6px; width: 6px; height: 32px; margin-left: -3px; border-radius: 3px; background: var(--cocoa); box-shadow: 0 0 0 2px #fff; }
+.bake.meter-in { animation: meter-in 0.3s cubic-bezier(0.2, 1.4, 0.4, 1); }
+.bake.in-goal .goal-ring { animation: goal-pulse 0.6s ease-out; box-shadow: 0 0 10px 2px rgba(224, 96, 126, 0.55); }
+@keyframes goal-pulse {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+@media (min-aspect-ratio: 6/5) { .bake { margin-left: 0; } }
 
 /* Hint, verdict and buttons; about 140 px tall when all three show. */
 .foot {
@@ -152,6 +226,12 @@ html, body {
 }
 .hint:empty, .hint[hidden] { display: none; }
 .hint.pop { animation: pop-in 0.3s cubic-bezier(0.2, 1.4, 0.4, 1); }
+/* A new hint cross-fades in (0.18 s); the same hint again does nothing. */
+.hint.swap { animation: hint-swap 0.18s ease-out; }
+@keyframes hint-swap {
+  from { opacity: 0.15; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
 
 .tag {
   font-size: 16px;
@@ -162,7 +242,11 @@ html, body {
   box-shadow: 0 3px 0 #e8d9c8;
 }
 .tag[hidden] { display: none; }
-.verdict { font-size: 24px; padding: 10px 24px; animation: pop-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1); }
+#tag { display: flex; align-items: center; gap: 8px; font-size: 18px; padding: 8px 18px; animation: pop-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1); }
+#tag[hidden] { display: none; }
+.tag .swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 2px var(--cocoa); flex: none; }
+/* The verdict comes in 150 ms after the tag, so the two read one after the other. */
+.verdict { font-size: 24px; padding: 10px 24px; animation: pop-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) 0.15s both; }
 
 @keyframes pop-in {
   from { transform: scale(0.3); opacity: 0; }
@@ -194,9 +278,16 @@ html, body {
   border-left: 0;
 }
 .bubble[hidden] { display: none; }
-.bubble.pop { animation: pop-in 0.3s cubic-bezier(0.2, 1.4, 0.4, 1); }
+/* Its own pop: it keeps the bubble's lift (pop-in's bare scale would draw it 70% low, over the hint). */
+.bubble.pop { animation: bubble-pop 0.3s cubic-bezier(0.2, 1.4, 0.4, 1); }
+@keyframes bubble-pop {
+  from { transform: translate(0, -70%) scale(0.3); opacity: 0; }
+  to { transform: translate(0, -70%) scale(1); opacity: 1; }
+}
 /* Flipped to the left of the head: the tail points right. */
 .bubble.flip::after { left: auto; right: -9px; border-right: 0; border-left: 9px solid #fff; }
+/* Over the cat's hat: the tail points down at it. */
+.bubble.above::after { left: 20px; bottom: -9px; border: 9px solid transparent; border-top-color: #fff; border-bottom: 0; }
 /* Docked bottom-left while the cat is out of view: no tail, a little cat instead. */
 .bubble.docked::after { display: none; }
 .bubble.docked::before { content: '🐱'; margin-right: 6px; }
@@ -228,6 +319,8 @@ html, body {
   box-shadow: 0 8px 0 #e8d9c8;
 }
 .card h2, .card h3 { margin: 0; }
+.lightbox-img { width: 180px; height: 180px; border-radius: 20px; box-shadow: 0 4px 0 #e8d9c8; animation: pop-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+.lightbox-img[hidden] { display: none; }
 .card p { margin: 0; }
 
 .chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
@@ -239,7 +332,10 @@ html, body {
   border-radius: 999px;
   padding: 10px 16px;
   cursor: pointer;
+  touch-action: manipulation;
 }
+.chip { display: inline-flex; align-items: center; gap: 8px; }
+.chip svg { width: 22px; height: 22px; flex: none; }
 .chip.on { border-color: var(--pink); background: #ffe3e8; }
 
 .pill {
@@ -266,14 +362,62 @@ html, body {
   transition: opacity 0.6s;
 }
 .title-card.away { opacity: 0; pointer-events: none; }
-.title-card .logo { font-size: 72px; animation: bob 2.4s ease-in-out infinite; }
+.title-card .logo { width: 112px; height: 112px; border-radius: 28px; animation: bob 2.4s ease-in-out infinite; }
 .title-card h1 { margin: 0; font-size: 48px; line-height: 1.05; font-weight: 700; }
 .made-for { margin: 0 0 18px; font-size: 18px; color: #a07c6c; }
-.loading { font-size: 14px; color: #a07c6c; min-height: 1.2em; }
+.loading { font-size: 14px; color: #a07c6c; min-height: 1.2em; margin: 0; animation: loading-bob 1.6s ease-in-out infinite; }
+.loading:empty { animation: none; }
+/* The friendly can't-open message is bigger and still, with the button gone. */
+.loading.fail { font-size: 18px; line-height: 1.4; color: var(--cocoa); max-width: 300px; animation: none; }
+.loading .emoji { width: 1.2em; height: 1.2em; vertical-align: -0.25em; }
+@keyframes loading-bob {
+  0%, 100% { transform: translateY(0); opacity: 0.75; }
+  50% { transform: translateY(-3px); opacity: 1; }
+}
+
+/* The page lost its WebGL context and could not get it back. */
+.lost {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 12;
+  font: 600 18px/1.3 var(--font);
+  color: var(--cocoa);
+  background: #fff;
+  border: 0;
+  border-radius: 20px;
+  padding: 16px 22px;
+  box-shadow: 0 5px 0 #e8d9c8;
+  cursor: pointer;
+}
+.lost[hidden] { display: none; }
+
+/* Swipe hints: soft chevrons at the left and right edges, nudging outward. */
+.chevrons { position: fixed; inset: 0; pointer-events: none; z-index: 2; transition: opacity 0.6s; }
+.chevrons[hidden] { display: block; opacity: 0; }
+.chev { position: absolute; top: 52%; width: 18px; height: 30px; fill: none; stroke: var(--cocoa); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.45; }
+.chev-l { left: 8px; animation: chev-l 1.8s ease-in-out infinite; }
+.chev-r { right: 8px; animation: chev-r 1.8s ease-in-out infinite; }
+@keyframes chev-l { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-4px); } }
+@keyframes chev-r { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
+
+/* The cakes past the Shelf's dozen, oldest first. */
+.more-list { list-style: none; margin: 0; padding: 0; width: 100%; max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.more-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 10px; align-items: center; background: #fff; border-radius: 14px; padding: 8px 12px; }
+.more-list .n { font-weight: 700; color: #a07c6c; }
+.more-list .name { font-weight: 600; }
+.more-list .date { grid-column: 2; font-size: 13px; color: #a07c6c; }
+.more-list .pill { grid-row: 1 / span 2; grid-column: 3; font-size: 14px; }
 
 @keyframes bob {
   0%, 100% { transform: translateY(0) rotate(-3deg); }
   50% { transform: translateY(-8px) rotate(3deg); }
+}
+
+/* Motion off: every HUD animation and transition finishes at once. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0s !important; animation-delay: 0s !important; transition-duration: 0s !important; }
 }
 
 #fps {
@@ -285,4 +429,44 @@ html, body {
   background: rgba(255, 255, 255, 0.8);
   border-radius: 8px;
   padding: 4px 8px;
+}
+
+/* The finger cue: a soft white fingertip that presses down and sends out a ring, on the
+   thing the Step wants touched. Positioned by a transform each frame (hud.ts). */
+.cue {
+  position: fixed;
+  left: -22px;
+  top: -22px;
+  width: 44px;
+  height: 44px;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.cue.on { opacity: 1; }
+.cue::before, .cue::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+.cue::before {
+  background: radial-gradient(circle, #fff 0 38%, rgba(255, 255, 255, 0.7) 50%, rgba(255, 255, 255, 0) 70%);
+  box-shadow: 0 2px 6px rgba(107, 74, 58, 0.25);
+  animation: cue-press 1.2s ease-in-out infinite;
+}
+.cue::after {
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  animation: cue-ring 1.2s ease-out infinite;
+}
+@keyframes cue-press {
+  0%, 100% { transform: scale(1); }
+  35% { transform: scale(0.78); }
+  55% { transform: scale(0.85); }
+}
+@keyframes cue-ring {
+  0%, 30% { transform: scale(0.4); opacity: 0; }
+  40% { opacity: 1; }
+  100% { transform: scale(1.7); opacity: 0; }
 }

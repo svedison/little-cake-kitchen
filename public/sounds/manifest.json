@@ -1,1 +1,119 @@
-{}
+{
+  "crack": [
+    { "file": "crack-244741.mp3", "gain": 0.9 },
+    { "file": "crack-336614.mp3", "start": 0, "dur": 0.22, "gain": 0.9 },
+    { "file": "crack-336614.mp3", "start": 0.23, "dur": 0.2, "gain": 0.85 },
+    { "file": "crack-336614.mp3", "start": 3.57, "dur": 0.35, "gain": 0.9 }
+  ],
+  "plop": [
+    { "file": "plop-495118.mp3", "dur": 0.5, "gain": 0.7 },
+    { "file": "plop-134710.mp3", "dur": 0.5, "gain": 0.65, "rate": 1.1 }
+  ],
+  "squelch": [
+    { "file": "plop-134710.mp3", "gain": 0.55, "rate": 0.85 }
+  ],
+  "tap": [
+    { "file": "tink-209014.mp3", "dur": 0.5, "gain": 0.45 },
+    { "file": "spoon-235573.mp3", "start": 0.47, "dur": 0.28, "gain": 0.45 },
+    { "file": "spoon-235573.mp3", "start": 3.58, "dur": 0.28, "gain": 0.45 },
+    { "file": "spoon-235573.mp3", "start": 5.36, "dur": 0.25, "gain": 0.45 }
+  ],
+  "clink": [
+    { "file": "tink-209014.mp3", "gain": 0.55, "rate": 1.15 },
+    { "file": "spoon-235573.mp3", "start": 0.78, "dur": 0.35, "gain": 0.55 },
+    { "file": "spoon-235573.mp3", "start": 3.96, "dur": 0.4, "gain": 0.55 },
+    { "file": "spoon-235573.mp3", "start": 8.08, "dur": 0.35, "gain": 0.55 }
+  ],
+  "paper": [
+    { "file": "paper-398898.mp3", "gain": 0.6 },
+    { "file": "paper-398898.mp3", "start": 0.5, "dur": 0.9, "gain": 0.6, "rate": 1.1 }
+  ],
+  "book": [
+    { "file": "book-394790.mp3", "gain": 0.6 }
+  ],
+  "lemon": [
+    { "file": "lemon-845258.mp3", "start": 0.46, "dur": 0.42, "gain": 0.6 },
+    { "file": "lemon-845258.mp3", "start": 0.7, "dur": 0.45, "gain": 0.6 },
+    { "file": "lemon-845258.mp3", "start": 1.04, "dur": 0.5, "gain": 0.6 }
+  ],
+  "door": [
+    { "file": "door-455538.mp3", "gain": 0.6 },
+    { "file": "door-787417.mp3", "start": 4.34, "dur": 0.7, "gain": 0.6 },
+    { "file": "door-787417.mp3", "start": 11.6, "dur": 0.6, "gain": 0.6 },
+    { "file": "door-787417.mp3", "start": 18.2, "dur": 0.6, "gain": 0.6 }
+  ],
+  "tick": [
+    { "file": "timer-204103.mp3", "start": 1.99, "dur": 0.12, "gain": 0.4 }
+  ],
+  "bell": [
+    { "file": "timer-204103.mp3", "start": 10.55, "dur": 1.25, "gain": 0.55 }
+  ],
+  "chomp": [
+    { "file": "chomp-532216.mp3", "start": 1.04, "dur": 0.3, "gain": 0.7 },
+    { "file": "chomp-532216.mp3", "start": 3.58, "dur": 0.3, "gain": 0.65 },
+    { "file": "chomp-532216.mp3", "start": 6.08, "dur": 0.25, "gain": 0.7 }
+  ],
+  "drop": [
+    { "file": "drop-404922.mp3", "start": 0.32, "dur": 0.4, "gain": 0.55 },
+    { "file": "drop-235498.mp3", "start": 0.12, "dur": 0.35, "gain": 0.5 },
+    { "file": "drop-460243.mp3", "start": 0.71, "dur": 0.35, "gain": 0.55 },
+    { "file": "drop-353105.mp3", "start": 0.22, "dur": 0.3, "gain": 0.45 },
+    { "file": "drop-353105.mp3", "start": 1.16, "dur": 0.3, "gain": 0.5 }
+  ],
+  "grab": [
+    { "file": "grab-365519.mp3", "start": 0.05, "dur": 0.55, "gain": 0.35 },
+    { "file": "grab-812359.mp3", "start": 0.41, "dur": 0.5, "gain": 0.35 }
+  ],
+  "splash": [
+    { "file": "wet-679391.mp3", "start": 0.33, "dur": 0.5, "gain": 0.55 },
+    { "file": "wet-532140.mp3", "dur": 0.45, "gain": 0.5, "rate": 0.85 },
+    { "file": "plop-495118.mp3", "dur": 0.5, "gain": 0.5, "rate": 0.85 }
+  ],
+  "slop": [
+    { "file": "wet-269482.mp3", "start": 0.05, "dur": 0.45, "gain": 0.5, "rate": 0.85 },
+    { "file": "wet-271666.mp3", "dur": 0.6, "gain": 0.45 },
+    { "file": "wet-515621.mp3", "dur": 0.3, "gain": 0.45, "rate": 0.8 }
+  ],
+  "drip": [
+    { "file": "wet-515621.mp3", "dur": 0.2, "gain": 0.3, "rate": 0.7 },
+    { "file": "wet-532140.mp3", "dur": 0.2, "gain": 0.3, "rate": 0.9 },
+    { "file": "wet-269482.mp3", "start": 0.05, "dur": 0.2, "gain": 0.28, "rate": 0.8 }
+  ],
+  "berry": [
+    { "file": "wet-269482.mp3", "start": 0.05, "dur": 0.22, "gain": 0.35, "rate": 1.1 },
+    { "file": "wet-532140.mp3", "dur": 0.22, "gain": 0.35, "rate": 1.15 },
+    { "file": "plop-495118.mp3", "dur": 0.25, "gain": 0.35, "rate": 1.2 }
+  ],
+  "rack": [
+    { "file": "rack-855679.mp3", "start": 0, "dur": 0.8, "gain": 0.5 },
+    { "file": "rack-835789.mp3", "start": 1.83, "dur": 0.4, "gain": 0.5 },
+    { "file": "rack-835789.mp3", "start": 8.78, "dur": 0.45, "gain": 0.5 },
+    { "file": "rack-835789.mp3", "start": 9.48, "dur": 0.4, "gain": 0.5 }
+  ],
+  "latch": [
+    { "file": "latch-868283.mp3", "start": 0.68, "dur": 0.5, "gain": 0.5 },
+    { "file": "latch-383802.mp3", "start": 1.25, "dur": 0.4, "gain": 0.5 }
+  ],
+  "creak": [
+    { "file": "creak-721025.mp3", "start": 0.92, "dur": 1.45, "gain": 0.45 },
+    { "file": "creak-721025.mp3", "start": 4.73, "dur": 1.5, "gain": 0.45 }
+  ],
+  "steam": [
+    { "file": "steam-234782.mp3", "start": 0.08, "dur": 1.3, "gain": 0.4 },
+    { "file": "steam-234782.mp3", "start": 0.08, "dur": 1.3, "gain": 0.38, "rate": 0.85 }
+  ],
+  "tink": [
+    { "file": "tink-509381.mp3", "start": 0.43, "dur": 0.5, "gain": 0.35 },
+    { "file": "tink-107785.mp3", "gain": 0.35 },
+    { "file": "tink-800115.mp3", "start": 0.43, "dur": 0.27, "gain": 0.3 }
+  ],
+  "loops": {
+    "whisk": { "file": "whisk-467898.mp3", "start": 4.2, "end": 6.7, "gain": 0.6 },
+    "pour": { "file": "pour-699231.mp3", "start": 40.9, "end": 43.0, "gain": 0.55 },
+    "glug": { "file": "pour-699231.mp3", "start": 20.4, "end": 23.4, "gain": 0.35 },
+    "flour": { "file": "flour-137259.mp3", "start": 2.1, "end": 4.1, "gain": 0.5 },
+    "oven": { "file": "oven-320453.mp3", "start": 6.0, "end": 9.0, "gain": 0.55 },
+    "tick": { "file": "timer-204103.mp3", "start": 1.9, "end": 2.96, "gain": 0.4 },
+    "sizzle": { "file": "sizzle-353124.mp3", "start": 9.0, "end": 12.4, "gain": 0.3 }
+  }
+}

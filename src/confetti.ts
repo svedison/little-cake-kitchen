@@ -2,6 +2,7 @@
 // on the counter and lies there.
 import * as THREE from 'three';
 import { ParticlePool } from './particles';
+import { sound } from './sound';
 
 const COLORS = [0xffb6c1, 0xffe8a3, 0xb9d8a8, 0xddeff7, 0xffffff];
 const N = 90;
@@ -23,6 +24,9 @@ export class Confetti {
 
   burst(at: THREE.Vector3) {
     this.pool.clear();
+    // a party popper going off, and two little bells (kept under the egg crack's level)
+    sound.play('pop', { gain: 0.6, rate: 0.8 });
+    sound.play('cheer', { gain: 0.7, delay: 0.06 });
     for (let i = 0; i < N; i++) {
       const a = Math.random() * Math.PI * 2;
       const r = (0.6 + Math.random() * 0.8) * 0.35; // outward speed, m/s

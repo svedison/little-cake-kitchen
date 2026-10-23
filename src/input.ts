@@ -1,6 +1,8 @@
 // One finger. A pointer-down is offered to the active handlers first (a Step grabbing an
 // egg, say); if nobody claims it, it becomes a swipe (turning between Stations) or a tap.
 
+import { sound } from './sound';
+
 export interface PointerHandler {
   /** Return true to claim this pointer until it is released. */
   down(x: number, y: number): boolean;
@@ -20,6 +22,10 @@ const STALE_MS = 80;   // a finger that paused this long before lifting has no m
 export class Pointer {
   readonly handlers: PointerHandler[] = [];
   readonly taps: ((x: number, y: number) => void)[] = [];
+  /** A pointer-down nobody claimed. */
+  readonly misses: ((x: number, y: number) => void)[] = [];
+  /** A pointer-down a handler claimed (the Kitchen's flow hears every grab and hold). */
+  readonly claims: ((h: PointerHandler) => void)[] = [];
   swipe: SwipeTarget | null = null;
   private active: PointerHandler | null = null;
   private id = -1;
@@ -37,6 +43,7 @@ export class Pointer {
   }
 
   private down(e: PointerEvent) {
+    sound.wake(); // a context iOS suspended comes back on the next touch
     if (this.id !== -1) return;
     this.id = e.pointerId;
     this.el.setPointerCapture(e.pointerId);
@@ -47,9 +54,17 @@ export class Pointer {
     this.swiping = false;
     this.active = null;
     for (const h of this.handlers) {
-      if (h.down(e.clientX, e.clientY)) { this.active = h; return; }
+      if (h.down(e.clientX, e.clientY)) {
+        this.active = h;
+        for (const c of this.claims) c(h);
+        return;
+      }
     }
+    for (const m of this.misses) m(e.clientX, e.clientY);
   }
+
+  /** Is a finger down right now. */
+  get busy() { return this.id !== -1; }
 
   private move(e: PointerEvent) {
     if (e.pointerId !== this.id) return;

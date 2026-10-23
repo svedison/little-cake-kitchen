@@ -4,10 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <title>Creme's Kitchen</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8D%B0%3C/text%3E%3C/svg%3E">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#fff6e9">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Creme's Kitchen">
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <!-- Fredoka (SIL OFL, public/fonts/OFL.txt) is self-hosted: the kitchen opens offline and never waits on a font CDN. -->
+  <link rel="preload" href="/fonts/fredoka-400.woff2" as="font" type="font/woff2" crossorigin>
 </head>
 <body>
   <canvas id="c"></canvas>
@@ -21,9 +27,12 @@
         <circle class="track" cx="60" cy="60" r="50"/>
         <circle class="sweet" cx="60" cy="60" r="50"/>
         <circle class="arc" cx="60" cy="60" r="50"/>
-        <!-- The arcs start at 12 o'clock because the whole svg is rotated; the label turns back upright. -->
-        <text class="ring-label" x="60" y="56" transform="rotate(90 60 60)" text-anchor="middle">let go<tspan x="60" dy="1.15em">here</tspan></text>
+        <!-- The arcs start at 12 o'clock because the whole svg is rotated. The heart sits on the
+             sweet wedge itself (placed by Hud.setRing) and swells while the arc is in it. -->
+        <g class="ring-heart"><path d="M0 5.5C-7.5 0-7 -6.5-3.4 -6.5-1.6 -6.5-0.4 -5.4 0 -4.2 0.4 -5.4 1.6 -6.5 3.4 -6.5 7 -6.5 7.5 0 0 5.5Z"/></g>
       </svg>
+      <!-- The bake gauge: bands, labels and the goal ring are filled in by Hud.bakeGauge. -->
+      <div id="bake" class="bake" aria-hidden="true" hidden></div>
     </header>
     <div class="foot">
       <div id="tag" class="tag" hidden></div>
@@ -40,7 +49,7 @@
   <div id="book" class="overlay" hidden>
     <div class="card">
       <h2>Basque Cheesecake</h2>
-      <p class="muted">Creamy inside, burnt on top. Pick a flavour:</p>
+      <p class="muted">Creamy inside, burnt on top. In the oven, hold until the top is BURNT: that's the Basque way! Pick a flavour:</p>
       <div id="book-flavors" class="chips"></div>
       <button id="book-bake" class="btn btn-big">Bake!</button>
       <button id="book-close" class="btn btn-ghost btn-small">Not now</button>
@@ -49,6 +58,7 @@
 
   <div id="lightbox" class="overlay" hidden>
     <div class="card">
+      <img id="lightbox-img" class="lightbox-img" alt="" hidden>
       <h3 id="lightbox-title"></h3>
       <p id="lightbox-date" class="muted"></p>
       <p>Chef cat says: <span id="lightbox-verdict" class="pill"></span></p>
@@ -56,11 +66,27 @@
     </div>
   </div>
 
+  <div id="more" class="overlay" hidden>
+    <div class="card">
+      <h3>Older cakes</h3>
+      <ol id="more-list" class="more-list"></ol>
+      <button id="more-close" class="btn btn-small">Close</button>
+    </div>
+  </div>
+
+  <!-- Swipe hints at the screen edges, until the first swipe between Stations. -->
+  <div id="chevrons" class="chevrons" aria-hidden="true" hidden>
+    <svg class="chev chev-l" viewBox="0 0 24 40"><path d="M17 6 L5 20 L17 34"/></svg>
+    <svg class="chev chev-r" viewBox="0 0 24 40"><path d="M7 6 L19 20 L7 34"/></svg>
+  </div>
+
+  <button id="lost" class="lost" hidden>The kitchen fell asleep. Tap to reload</button>
+
   <div id="title" class="title-card">
-    <div class="logo" aria-hidden="true">🍰</div>
+    <img class="logo" src="/icons/icon.svg" alt="" width="112" height="112">
     <h1>Creme's<br>Kitchen</h1>
     <p class="made-for">made for Creme</p>
-    <button id="start" class="btn btn-big">Let's bake!</button>
+    <button id="start" class="btn btn-big" disabled>Let's bake!</button>
     <p id="loading" class="loading">warming up the oven…</p>
   </div>
 

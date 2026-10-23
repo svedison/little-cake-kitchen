@@ -4,6 +4,7 @@
 // damped spring. `settled` only reads true once that motion really is over.
 import * as THREE from 'three';
 import { easeInOutCubic } from './motion';
+import { sound } from './sound';
 import type { SwipeTarget } from './input';
 
 export type StationId = 'fridge' | 'counter' | 'stove';
@@ -11,8 +12,11 @@ export const STATION_X: Record<StationId, number> = { fridge: -0.95, counter: 0,
 const ORDER: StationId[] = ['fridge', 'counter', 'stove'];
 const HOP = STATION_X.counter - STATION_X.fridge;
 
-/** Where the camera stands and what it looks at, relative to the rail's x. */
-export interface Pose { y: number; z: number; lookY: number; lookZ: number }
+/**
+ * Where the camera stands and what it looks at, relative to the rail's x. A Step's focus may
+ * also narrow the field of view (degrees), to frame a close-up from further back.
+ */
+export interface Pose { y: number; z: number; lookY: number; lookZ: number; fov?: number }
 
 const PX_TO_M = 0.0022;    // a swipe moves the rail this far per CSS pixel
 const END_GIVE = 0.12;     // how far past the end Stations a swipe can pull, against a rubber band
@@ -20,14 +24,17 @@ const LOCKED_GIVE = 0.06;  // the same while the rail is locked: a tug, never a 
 const OVERSHOOT = 0.002;   // the timeline aims 2 mm past the Station; the spring brings it back
 const SETTLE_OMEGA = 20;   // critically damped: those 2 mm are under 0.5 mm 0.14 s after the timeline ends
 const MAX_V0 = 1.5;        // m/s of swipe momentum fed into a timeline, at most
+const SWOOSH_PER_PX = 0.0002; // swoosh gain per px/s of swipe (a brisk 1500 px/s flick is the 0.3 cap; by ear)
+const SWOOSH_MAX = 0.3;
 
-// Tuned by eye. Portrait: the bowl and the front slot both fit a phone. Landscape: further
+// Tuned by eye. Portrait: the bowl sits in the middle of the screen with the front slot
+// below it, so the action fills the phone instead of crowding the header. Landscape: further
 // back and higher, so the hat has ~100 px of headroom under the top edge. The Stove stands
 // higher and looks up, so the oven door sits at the centre of the screen with the pan still
 // in front of it; the Fridge looks a little higher, at the Shelf.
 const PORTRAIT: Record<StationId, Pose> = {
-  counter: { y: 0.5, z: 0.42, lookY: 0.02, lookZ: -0.02 },
-  fridge: { y: 0.56, z: 0.6, lookY: 0.12, lookZ: -0.02 },
+  counter: { y: 0.52, z: 0.46, lookY: 0.075, lookZ: -0.02 },
+  fridge: { y: 0.56, z: 0.6, lookY: 0.17, lookZ: -0.02 },
   stove: { y: 0.62, z: 0.5, lookY: 0.1, lookZ: -0.03 },
 };
 const LANDSCAPE: Record<StationId, Pose> = {
@@ -67,14 +74,25 @@ export class Rail implements SwipeTarget {
   private dragRaw = 0;
   private readonly pose: Pose = { ...PORTRAIT.counter };
   private poseLag = 0;
+  /** How far the field of view has blended from the Station's toward a focus's own (0..1). */
+  private fovMix = 0;
+  private focusFov = 0;
+  /** A Station change is under way: the view lands with a soft knock once it settles. */
+  private arriving = false;
 
   constructor(private readonly camera: THREE.PerspectiveCamera) {
     this.apply();
   }
 
   goTo(id: StationId) {
-    if (this.current !== id) { this.current = id; for (const l of this.listeners) l(id); }
+    if (this.current !== id) { this.current = id; this.turned(SWOOSH_MAX * 0.6); for (const l of this.listeners) l(id); }
     this.travel(STATION_X[id], 0);
+  }
+
+  /** The view turns to another Station: air past the ear, louder for a quicker swipe. */
+  private turned(gain: number) {
+    sound.play('swoosh', { gain: Math.min(SWOOSH_MAX, gain) });
+    this.arriving = true;
   }
 
   /** The move is over: the timeline ran out, the spring is still, and the view has caught up. */
@@ -125,7 +143,11 @@ export class Rail implements SwipeTarget {
       const d = Math.abs(STATION_X[id] - guess);
       if (d < bestD) { bestD = d; best = id; }
     }
-    if (this.current !== best) { this.current = best; for (const l of this.listeners) l(best); }
+    if (this.current !== best) {
+      this.current = best;
+      this.turned(THREE.MathUtils.clamp(Math.abs(vx) * SWOOSH_PER_PX, 0.08, SWOOSH_MAX));
+      for (const l of this.listeners) l(best);
+    }
     this.travel(STATION_X[best], v);
   }
 
@@ -152,6 +174,7 @@ export class Rail implements SwipeTarget {
     }
     this.velocity = dt > 0 ? (this.x - before) / dt : 0;
     this.apply(dt);
+    if (this.arriving && this.settled) this.arriving = false; // the view lands silently (no thud on every Station)
   }
 
   private travel(target: number, v0: number) {
@@ -195,11 +218,17 @@ export class Rail implements SwipeTarget {
     p.z += (want.z - p.z) * k;
     p.lookY += (want.lookY - p.lookY) * k;
     p.lookZ += (want.lookZ - p.lookZ) * k;
-    this.poseLag = Math.max(Math.abs(want.y - p.y), Math.abs(want.z - p.z), Math.abs(want.lookY - p.lookY), Math.abs(want.lookZ - p.lookZ));
-
     const aspect = this.camera.aspect;
-    const fov = this.landscape ? FOV.landscape : aspect < 0.75 ? FOV.portrait : FOV.tablet;
+    const base = this.landscape ? FOV.landscape : aspect < 0.75 ? FOV.portrait : FOV.tablet;
+    // A focus with its own field of view zooms with the same lean as the pose; letting the
+    // focus go zooms back out to the Station's.
+    if (this.focus?.fov) this.focusFov = this.focus.fov;
+    const mixWant = this.focus?.fov ? 1 : 0;
+    this.fovMix += (mixWant - this.fovMix) * k;
+    if (Math.abs(mixWant - this.fovMix) < 1e-4) this.fovMix = mixWant;
+    const fov = this.fovMix > 0 ? base + (this.focusFov - base) * this.fovMix : base;
     if (this.camera.fov !== fov) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
+    this.poseLag = Math.max(Math.abs(want.y - p.y), Math.abs(want.z - p.z), Math.abs(want.lookY - p.lookY), Math.abs(want.lookZ - p.lookZ), Math.abs(mixWant - this.fovMix) * 0.1);
     this.camera.position.set(this.x, p.y, p.z);
     this.camera.lookAt(this.x, p.lookY, p.lookZ);
   }

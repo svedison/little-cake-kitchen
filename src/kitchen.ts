@@ -34,16 +34,14 @@ export const SLOT = {
   // frontRight just fits; a prop at frontLeft must be small (0.11 m) and sits a little back.
   frontLeft: new THREE.Vector3(-0.085, 0, 0.12),
   frontRight: new THREE.Vector3(0.03, 0, 0.15),
-  /** Behind the bowl on the right, where the view is wider: the parchment waits here. */
-  backRight: new THREE.Vector3(0.125, 0, -0.245),
   side: new THREE.Vector3(0.17, 0, 0.1),
   /** Off the right edge at every viewport; props slide in from and out to here. */
   park: new THREE.Vector3(0.6, 0, 0.17),
   /** Off the left edge, for the bowl once the cake is out. */
   bowlAway: new THREE.Vector3(-0.55, 0, -0.06),
-  // Beside the bowl's back-left: both paws show past the rim, and the hat stays under the
-  // top edge of a landscape view (further back it is cut off). Tuned by eye.
-  cat: new THREE.Vector3(-0.125, 0, -0.13),
+  // Behind the bowl's back-left with a gap to its rim: both paws show past it, and the hat
+  // stays under the step header on a phone even mid-hop (further back it is not). Tuned by eye.
+  cat: new THREE.Vector3(-0.14, 0, -0.15),
   catStove: new THREE.Vector3(STATION_X.stove - 0.22, 0, -0.2),
 };
 
@@ -125,6 +123,11 @@ export class Kitchen {
   start() {
     this.last = performance.now();
     this.renderer.setAnimationLoop(() => this.frame());
+  }
+
+  /** Draw one frame as things stand (behind the title card, or after the context comes back). */
+  render() {
+    this.renderer.render(this.scene, this.camera);
   }
 
   /** A ray from the camera through a screen point. */
@@ -288,8 +291,49 @@ export class Kitchen {
     );
     wall.position.set(0, 0.75, -0.55);
     this.scene.add(wall);
+    // A tiled backsplash along the counter, so no Station looks onto a bare wall.
+    const tiles = new THREE.Mesh(
+      new THREE.PlaneGeometry(5, TILES.h),
+      new THREE.MeshStandardMaterial({ map: tileTexture(5 / TILES.size, TILES.h / TILES.size), emissive: 0xffffff, emissiveIntensity: 0.12, roughness: 0.6 }),
+    );
+    tiles.position.set(0, TILES.h / 2, -0.549);
+    tiles.receiveShadow = true;
+    this.scene.add(tiles);
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(5, 0.012, 0.012), new THREE.MeshStandardMaterial({ color: P.pink, roughness: 0.6 }));
+    trim.position.set(0, TILES.h, -0.544);
+    this.scene.add(trim);
 
     const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.02, 0));
     this.world.createCollider(RAPIER.ColliderDesc.cuboid(1.8, 0.02, 0.55).setFriction(0.9), body);
   }
+}
+
+/** The backsplash: 5 cm square tiles up to 34 cm above the counter. */
+const TILES = { size: 0.05, h: 0.34 };
+
+/** Cream tiles with soft grout and a pink one here and there, repeated over the backsplash. */
+function tileTexture(rx: number, ry: number) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#f4dcd6'; // grout
+  g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      g.fillStyle = (i * 3 + j * 2) % 7 === 0 ? '#ffd3dc' : '#fffaf3';
+      g.beginPath();
+      g.roundRect(i * 64 + 3, j * 64 + 3, 58, 58, 8);
+      g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.7)'; // a glint on each tile's top-left
+      g.beginPath();
+      g.roundRect(i * 64 + 9, j * 64 + 8, 18, 5, 3);
+      g.fill();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(rx / 4, ry / 4);
+  t.anisotropy = 4;
+  return t;
 }

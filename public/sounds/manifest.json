@@ -85,18 +85,12 @@
     { "file": "plop-495118.mp3", "dur": 0.25, "gain": 0.35, "rate": 1.2 }
   ],
   "rack": [
-    { "file": "rack-855679.mp3", "start": 0, "dur": 0.8, "gain": 0.5 },
     { "file": "rack-835789.mp3", "start": 1.83, "dur": 0.4, "gain": 0.5 },
     { "file": "rack-835789.mp3", "start": 8.78, "dur": 0.45, "gain": 0.5 },
     { "file": "rack-835789.mp3", "start": 9.48, "dur": 0.4, "gain": 0.5 }
   ],
   "latch": [
-    { "file": "latch-868283.mp3", "start": 0.68, "dur": 0.5, "gain": 0.5 },
-    { "file": "latch-383802.mp3", "start": 1.25, "dur": 0.4, "gain": 0.5 }
-  ],
-  "creak": [
-    { "file": "creak-721025.mp3", "start": 0.92, "dur": 1.45, "gain": 0.45 },
-    { "file": "creak-721025.mp3", "start": 4.73, "dur": 1.5, "gain": 0.45 }
+    { "file": "latch-868283.mp3", "start": 0.68, "dur": 0.5, "gain": 0.5 }
   ],
   "steam": [
     { "file": "steam-234782.mp3", "start": 0.08, "dur": 1.3, "gain": 0.4 },

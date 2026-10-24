@@ -285,6 +285,8 @@ export class BakeStep implements StepRunner, PointerHandler {
   private readonly berries: THREE.Mesh[] = [];
   /** The pan is down on the counter after the bake and the door has been told to shut. */
   private landed = false;
+  /** The open door has hit its hinge stop (one thunk per opening). */
+  private thunked = false;
   private readonly w = new THREE.Vector3();
 
   constructor(private readonly ctx: StepContext) {}
@@ -563,7 +565,8 @@ export class BakeStep implements StepRunner, PointerHandler {
     this.doorMode = 'opening';
     this.doorFrom = this.doorAngle;
     this.doorT = 0;
-    sound.play('creak', { gain: 0.5 }); // the hinge as it falls open
+    sound.play('latch', { gain: 0.3, rate: 1.1 }); // the catch lets go; the hinge itself is quiet (a squeak read as a haunted house)
+    this.thunked = false;
   }
 
   private closeDoor() {
@@ -584,6 +587,8 @@ export class BakeStep implements StepRunner, PointerHandler {
         const u = this.doorT / fall;
         this.doorAngle = this.doorFrom + (DOOR.open - this.doorFrom) * (1 - Math.cos((u * Math.PI) / 2));
       } else {
+        // it lands on the hinge stop: a muffled thunk
+        if (!this.thunked) { this.thunked = true; sound.play('door', { gain: 0.3, rate: 0.85 }); }
         const u = Math.min(1, (this.doorT - fall) / (DOOR.openTime - fall));
         this.doorAngle = DOOR.open - DOOR.bounce * Math.sin(u * Math.PI);
         if (u >= 1) { this.doorAngle = DOOR.open; this.doorMode = 'still'; }
@@ -771,7 +776,7 @@ export class BakeStep implements StepRunner, PointerHandler {
     for (const l of [this.loop, this.sizzle, this.ticker]) l?.stop();
     this.loop = this.sizzle = this.ticker = null;
     sound.play('bell');
-    sound.play('steam', { gain: 0.5, delay: 0.25 }); // the door drops and the heat rolls out
+    sound.play('steam', { gain: 0.15, rate: 0.8, delay: 0.3 }); // the heat rolling out: a soft breath, under the bell
     if (timeout) cat.say('Phew! That\'s enough.', 'ooh');
     this.phase = 'opening';
     this.animT = 0;

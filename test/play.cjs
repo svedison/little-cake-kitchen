@@ -1001,12 +1001,12 @@ async function play(page, aim, prefix) {
     // Step 6: the oven, beat by beat.
     {
       const s6 = inStep(5);
-      expectSounds('step 6', s6, { names: ['grab', 'creak', 'rack', 'door', 'latch'], order: true });
+      expectSounds('step 6', s6, { names: ['grab', 'latch', 'door', 'rack', 'door', 'latch'], order: true });
       const wantChime = expect === 'under' ? 0 : 1, wantOver = expect === 'over' ? 1 : 0;
       expectSounds('step 6', s6, { names: ['bell', 'chime', 'over'], min: { bell: 1, chime: wantChime, over: wantOver }, max: { bell: 1, chime: wantChime, over: wantOver } });
       for (const c of s6.filter((e) => e.name === 'chime')) if (c.gain < 0.6) problem(`step 6: the burnt chime is only at gain ${c.gain}`);
       const bell = s6.findIndex((e) => e.name === 'bell');
-      if (bell >= 0) expectSounds('step 6 after the bell', s6.slice(bell + 1), { names: ['creak', 'rack', 'drop'], order: true });
+      if (bell >= 0) expectSounds('step 6 after the bell', s6.slice(bell + 1), { names: ['latch', 'door', 'rack', 'drop'], order: true });
       const sm = w.samples.filter((x) => x.step === 5);
       let still = 0;
       for (let i = 1; i < sm.length - 1; i++) if (sm[i].bake === 'bake' && sm[i].holding && sm[i + 1].progress > sm[i - 1].progress && lv(sm[i], 'tick') <= 0) still++;

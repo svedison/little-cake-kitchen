@@ -11,7 +11,8 @@
 export type SoundName =
   | 'crack' | 'plop' | 'tap' | 'clink' | 'paper' | 'door' | 'chomp' | 'confetti' | 'pop' | 'berry' | 'lemon'
   | 'grab' | 'drop' | 'slide' | 'swoosh' | 'book' | 'chip' | 'latch' | 'creak' | 'rack' | 'tick' | 'chime'
-  | 'over' | 'meh' | 'pat' | 'bell' | 'gulp' | 'cheer' | 'squelch' | 'splash' | 'drip' | 'steam' | 'clunk' | 'slop' | 'tink';
+  | 'over' | 'meh' | 'pat' | 'bell' | 'gulp' | 'cheer' | 'squelch' | 'splash' | 'drip' | 'steam' | 'clunk' | 'slop' | 'tink'
+  | 'whack' | 'smash' | 'crit' | 'build';
 export type LoopName = 'whisk' | 'pour' | 'oven' | 'flour' | 'tick' | 'glug' | 'sizzle';
 
 /** Physics a Loop can follow besides its level. */
@@ -124,6 +125,16 @@ const VOICES: Record<SoundName, Voice> = {
   // Something tiny and light on glass or ceramic (a cup lifted, whisk wires on the bowl).
   tink: { click: { g: 0.25, d: 0.002 }, modes: [{ f: 5200, q: 28, g: 0.18, d: 0.07 }, { f: 7600, q: 30, g: 0.08, d: 0.05 }] },
   clunk: { click: { g: 0.6, d: 0.006 }, modes: [{ f: 110, q: 6, g: 0.5, d: 0.14 }, { f: 330, q: 8, g: 0.2, d: 0.1 }], tail: { type: 'lowpass', f: 300, q: 1, g: 0.25, d: 0.1 } },
+  // ---- the secret: smashing the scenery (smash.ts) ----
+  // A swing landing: a hard click, a punchy low thock and a short crunchy mid tail. Its rate
+  // follows what was hit (tiles and ceramic higher, the plant lower).
+  whack: { click: { g: 0.9, d: 0.004 }, modes: [{ f: 180, q: 3, g: 0.6, d: 0.09 }, { f: 760, q: 5, g: 0.3, d: 0.06 }], tail: { type: 'bandpass', f: 1800, to: 900, q: 0.9, g: 0.35, a: 0.002, d: 0.09 } },
+  // It gives: a low boom, a crunch and a rattle of bits.
+  smash: { click: { g: 1, d: 0.008 }, tones: [{ f: 120, to: 45, g: 0.5, d: 0.25 }], tail: { type: 'lowpass', f: 3500, to: 600, q: 0.8, g: 0.55, a: 0.004, d: 0.35 }, repeat: { n: 5, gap: 0.045, jitter: 0.025, fall: 0.22 } },
+  // A weak point hit: a bright two-note ding over the whack.
+  crit: { tones: [{ f: 1760, g: 0.16, d: 0.12, type: 'triangle' }, { f: 2637, g: 0.14, d: 0.22, at: 0.05, type: 'triangle' }] },
+  // Something rebuilding: three quick rising blips.
+  build: { tones: [{ f: 660, g: 0.05, d: 0.06, type: 'square' }, { f: 880, g: 0.05, d: 0.06, at: 0.07, type: 'square' }, { f: 1175, g: 0.05, d: 0.1, at: 0.14, type: 'square' }] },
 };
 
 /** Synthesized loops: a filtered noise bed per sound (by ear), used when no recording is listed. */

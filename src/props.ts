@@ -663,26 +663,32 @@ function flame(x: CanvasRenderingContext2D, cx: number, cy: number, s: number) {
  */
 export function makeHob() {
   const g = new THREE.Group();
+  // The hob itself (top, rings, knobs) is one group standing on the counter, so it can be
+  // knocked down and built back up from its base as one thing (smash.ts).
+  const hob = new THREE.Group();
+  hob.name = 'hobBase';
+  g.add(hob);
   const top = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.02, 0.22), mat(0xf7f1ea, { roughness: 0.5 }));
   top.position.y = 0.01;
-  g.add(top);
+  hob.add(top);
   const ringMat = mat(0x5a4a44, { roughness: 0.4 });
   const ringGeo = new THREE.TorusGeometry(0.045, 0.006, 8, 32).rotateX(Math.PI / 2);
   for (const x of [-0.07, 0.075]) {
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.position.set(x, 0.021, 0);
-    g.add(ring);
+    hob.add(ring);
   }
   // Two knobs on the front lip.
   for (const x of [-0.07, 0.075]) {
     const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.01, 16).rotateX(Math.PI / 2), mat(P.pink));
     knob.position.set(x, 0.01, 0.112);
-    g.add(knob);
+    hob.add(knob);
   }
   // The pot: rounded pink body, a cream rim, a lid with a butter knob and two little handles.
   const potMat = mat(P.pink, { roughness: 0.45 });
   const prof = [[0, 0], [0.05, 0], [0.056, 0.006], [0.058, 0.02], [0.058, 0.07], [0.054, 0.072], [0.052, 0.07]];
   const pot = new THREE.Mesh(new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x, y)), 32), potMat);
+  pot.name = 'pot';
   pot.position.set(-0.07, 0.022, 0);
   const lid = new THREE.Mesh(new THREE.SphereGeometry(0.056, 32, 8, 0, Math.PI * 2, 0, Math.PI * 0.32), mat(0xfff6e9, { roughness: 0.4 }));
   lid.scale.y = 0.6;
@@ -700,6 +706,7 @@ export function makeHob() {
   // The moka pot: an eight-sided steel waist, a peaked lid and a cocoa handle.
   const steel = mat(P.steel, { metalness: 0.5, roughness: 0.3 });
   const moka = new THREE.Group();
+  moka.name = 'moka';
   const base = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.03, 0.045, 8), steel);
   base.position.y = 0.0225;
   const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.02, 0.045, 8), steel);
@@ -719,6 +726,71 @@ export function makeHob() {
   g.traverse((c) => { if ((c as THREE.Mesh).isMesh) c.receiveShadow = true; });
   for (const o of [pot, moka]) o.traverse((c) => { if ((c as THREE.Mesh).isMesh) c.castShadow = true; });
   return g;
+}
+
+/**
+ * A matcha crock of kitchen tools at the back of the Counter: a wooden spoon, a pink spatula
+ * and a whisk standing up out of it. Origin on the counter.
+ */
+export function makeCrock() {
+  const g = new THREE.Group();
+  const prof = [[0, 0], [0.036, 0], [0.04, 0.006], [0.042, 0.03], [0.04, 0.075], [0.043, 0.08], [0.04, 0.081]];
+  const body = new THREE.Mesh(new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x, y)), 28), mat(P.matcha, { roughness: 0.45 }));
+  g.add(body);
+  const wood = mat(0xd9a46c, { roughness: 0.7 });
+  const spoon = new THREE.Group();
+  const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.004, 0.15, 8), wood);
+  sh.position.y = 0.075;
+  const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.014, 12, 8), wood);
+  bowl.scale.set(1, 1.4, 0.45);
+  bowl.position.y = 0.155;
+  spoon.add(sh, bowl);
+  spoon.position.set(-0.012, 0.02, 0.006);
+  spoon.rotation.z = 0.22;
+  const spat = new THREE.Group();
+  const sh2 = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 0.13, 8), mat(0xffffff, { roughness: 0.5 }));
+  sh2.position.y = 0.065;
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.005), mat(P.pink, { roughness: 0.5 }));
+  blade.position.y = 0.145;
+  spat.add(sh2, blade);
+  spat.position.set(0.012, 0.02, -0.004);
+  spat.rotation.z = -0.25;
+  const wh = new THREE.Group();
+  const sh3 = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.09, 8), mat(P.cocoa));
+  sh3.position.y = 0.06;
+  wh.add(sh3);
+  const wire = mat(P.steel, { metalness: 0.5, roughness: 0.3 });
+  for (let i = 0; i < 3; i++) {
+    const loop = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0012, 4, 16), wire);
+    loop.scale.set(1, 1.7, 1);
+    loop.rotation.y = (i / 3) * Math.PI;
+    loop.position.y = 0.128;
+    wh.add(loop);
+  }
+  wh.position.set(0.002, 0.02, -0.014);
+  wh.rotation.x = -0.18;
+  g.add(spoon, spat, wh);
+  return shadowed(g);
+}
+
+/** A little potted basil: a terracotta pot and a round bush of leaves. Origin on the counter. */
+export function makePlant() {
+  const g = new THREE.Group();
+  const prof = [[0, 0], [0.028, 0], [0.036, 0.055], [0.04, 0.056], [0.04, 0.066], [0.0365, 0.066]];
+  const pot = new THREE.Mesh(new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x, y)), 24), mat(0xd98a62, { roughness: 0.8 }));
+  g.add(pot);
+  const soil = new THREE.Mesh(new THREE.CircleGeometry(0.036, 20).rotateX(-Math.PI / 2), mat(0x6b4a3a, { roughness: 1 }));
+  soil.position.y = 0.062;
+  g.add(soil);
+  const leaf = mat(0x8cc46e, { roughness: 0.6 });
+  const dark = mat(0x6faa55, { roughness: 0.6 });
+  const spots = [[0, 0.1, 0, 0.032], [-0.025, 0.088, 0.01, 0.022], [0.026, 0.09, -0.004, 0.024], [0.008, 0.125, -0.006, 0.022], [-0.012, 0.112, 0.018, 0.018], [0.015, 0.108, 0.02, 0.017]];
+  spots.forEach(([x, y, z, r], i) => {
+    const b = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), i % 2 ? dark : leaf);
+    b.position.set(x, y, z);
+    g.add(b);
+  });
+  return shadowed(g);
 }
 
 /** The fridge's size: a squat under-counter fridge that stands against the wall behind the Shelf, fully in a phone's view. */

@@ -725,8 +725,9 @@ export class BakeStep implements StepRunner, PointerHandler {
   /** Colour, rise and scorch patches for a progress; dt > 0 eases the colour change over ~0.1 s. */
   private applyLook(p: number, dt = 0) {
     const look = bakeLook(p);
-    // Raw batter keeps its own colour (blueberry is lilac) and bakes toward the stage colours by golden.
-    look.top.lerpColors(this.batter, look.top, THREE.MathUtils.smoothstep(p, 0.05, BAKE.stages[1].until));
+    // Raw batter keeps its own colour (blueberry is lilac) and has baked to the stage colours by
+    // the end of pale, so golden and on read exactly as the gauge shows them.
+    look.top.lerpColors(this.batter, look.top, THREE.MathUtils.smoothstep(p, 0, BAKE.stages[0].until));
     const k = dt > 0 ? 1 - Math.exp(-25 * dt) : 1;
     this.color.copy(this.domeMat.color).lerp(look.top, k);
     this.domeMat.color.copy(this.color);
@@ -833,6 +834,9 @@ export class BakeStep implements StepRunner, PointerHandler {
     hud.tag(null);
     k.rail.focus = null;
   }
+
+  /** The pan, while she carries it to the oven. */
+  weapon() { return this.carry?.held ? this.ctx.pan : null; }
 
   /** The Step's two views: 'door' frames the pan and the oven, 'window' leans in to the glass. */
   private pose(which: 'door' | 'window') {

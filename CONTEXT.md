@@ -33,5 +33,13 @@ The wall display at the Fridge Station where every cake the player has made sits
 _Avoid_: Gallery, history screen, grid
 
 **Nudge**:
-What happens when the player touches something that isn't part of the current Step: a cute wiggle and nothing else. The Kitchen never lets a wrong action through and never punishes it.
+What happens when the player touches something that isn't part of the current Step: a cute wiggle and nothing else. The Kitchen never lets a wrong action through and never punishes it. (Swinging a carried thing hard into the Scenery is not a touch; that is a Smash.)
 _Avoid_: Error, fail, mistake, penalty
+
+**Smash**:
+The hidden play nobody is told about: whatever the player is carrying, swung hard into the Scenery, damages it like a structure in a build-battle game (a damage number, a health bar, a weak point for double damage) until it bursts and later builds itself back. Only Scenery can be smashed; nothing a recipe needs ever breaks.
+_Avoid_: Destruction mode, rage mode, easter egg
+
+**Scenery**:
+The things in the Kitchen that no Step uses: the backsplash tiles, the hob and its pots, the crock of tools, the basil. The bowl, oven, pan, cat, book and Shelf are never Scenery.
+_Avoid_: Decor, background, props

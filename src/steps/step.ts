@@ -48,6 +48,11 @@ export interface StepRunner {
    * The cat's bubble keeps clear of it and the cat makes room for it.
    */
   focus?(): THREE.Object3D | null;
+  /**
+   * What the finger is swinging right now, when that is not focus() (the pan carried to the
+   * oven). Anything swung hard enough smashes the scenery (smash.ts). Defaults to focus().
+   */
+  weapon?(): THREE.Object3D | null;
   /** The props this Step put in the Kitchen, by name, for overlap checks. */
   boxes?(): Record<string, THREE.Object3D>;
   /**

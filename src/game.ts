@@ -8,13 +8,14 @@ import { Cat, CHOMP } from './cat';
 import { Hud } from './hud';
 import { Carry, nudge } from './gestures';
 import { Confetti } from './confetti';
-import { makePan, makeOven, makeHob, makeFridge, makeShelf, makeBook, makeCake, makeOtherCake, makeVerdictTag, makePlate, SHELF, FRIDGE } from './props';
+import { makePan, makeOven, makeHob, makeCrock, makePlant, makeFridge, makeShelf, makeBook, makeCake, makeOtherCake, makeVerdictTag, makePlate, SHELF, FRIDGE } from './props';
 import { motion, easeInOutCubic, easeOutCubic, easeOutBack } from './motion';
 import { BASQUE, VERDICTS, CHEERS, displayName, type Flavor, type StepDef } from './recipes';
 import { loadGallery, saveGallery, type CakeEntry } from './gallery';
 import { sound } from './sound';
 import { ease, type StepRunner, type Result, type Leftover } from './steps/step';
 import type { PointerHandler } from './input';
+import { Smash, type Kind } from './smash';
 
 export const PLAYER_NAME = 'Creme';
 
@@ -32,6 +33,20 @@ const BEAT = { react: 0.35, reactResult: 0.5, sameStation: 0.6, otherStation: 1.
 const SO_CLOSE = ['Close enough!', 'Still yummy!', 'Cute anyway!', 'That works!'];
 
 const pick = <T>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
+
+/** Set once she has broken something for the first time (the cat's first gasp is the big one). */
+const SMASHED_KEY = 'little-cake-kitchen.smashed';
+/** What the cat cries when something breaks, by what it was. */
+const SMASH_LINES: Record<string, string[]> = {
+  tile: ['Not the tiles!!', 'Who is fixing that?!', 'The wall!! Mrrow!'],
+  crock: ['My spoons!!', 'Nooo, my spatula!'],
+  plant: ['BASIL! Noooo!', 'What did Basil ever do to you?!'],
+  pot: ['That was my favourite pot!', 'Why the pot?!'],
+  moka: ['My COFFEE!!', 'No more coffee for us...'],
+  hob: ['The hob!? ...good thing we have an oven.', 'Okay that was kind of cool.'],
+};
+/** s between the cat's cries, however much breaks. */
+const SMASH_TALK_GAP = 5;
 
 /**
  * Taste-test timing (seconds): the cake reaches the mouth, then the cat's chomp (CHOMP in
@@ -176,6 +191,9 @@ export class Game {
   private readonly roomV = new THREE.Vector3();
   /** The plate left on the counter after the taste test, with the verdict stamp on it. */
   private plate: THREE.Group | null = null;
+  /** The secret: anything she carries can smash the scenery (smash.ts). */
+  readonly smash: Smash;
+  private smashTalkT = Infinity;
   /** Lightbox pictures of Shelf cakes, by cake number. */
   private readonly thumbs = new Map<number, string>();
 
@@ -191,6 +209,20 @@ export class Game {
     hob.position.set(STATION_X.stove + 0.36, 0, -0.38);
     hob.rotation.y = -0.15;
     k.scene.add(hob);
+    // A crock of tools and a pot of basil at the back of the Counter, for the room to feel lived in.
+    const crock = makeCrock();
+    crock.position.set(0.15, 0, -0.38);
+    crock.rotation.y = -0.4;
+    k.scene.add(crock);
+    const plant = makePlant();
+    plant.position.set(-0.19, 0, -0.45);
+    k.scene.add(plant);
+    this.smash = new Smash(k, k.tiles, () => this.swinging(), { broke: (name, kind, at) => this.onSmash(name, kind, at) });
+    this.smash.add('hob', hob.getObjectByName('hobBase')!, 'ceramic', 300);
+    this.smash.add('pot', hob.getObjectByName('pot')!, 'ceramic', 200);
+    this.smash.add('moka', hob.getObjectByName('moka')!, 'metal', 150);
+    this.smash.add('crock', crock, 'ceramic', 150);
+    this.smash.add('plant', plant, 'plant', 100);
     // The fridge stands against the wall right behind the Shelf, so a phone sees both whole.
     this.fridge.position.set(STATION_X.fridge, 0, -0.545 + FRIDGE.d / 2);
     k.scene.add(this.fridge);
@@ -228,6 +260,27 @@ export class Game {
     this.swipedBefore = true;
     writeFlag(SWIPED_KEY);
     this.hud.chevrons(false);
+  }
+
+  // ---- the secret ---------------------------------------------------------------
+
+  /** What her finger is swinging right now: the thing a Step lets her carry, or the cake on the way to the cat. */
+  private swinging(): THREE.Object3D | null {
+    if (!this.k.pointer.busy) return null;
+    if (this.feed?.held) return this.feed.held.obj;
+    if (this.phase !== 'baking' || !this.current || (this.transition && this.transition !== 'arrive')) return null;
+    return this.current.weapon ? this.current.weapon() : this.current.focus?.() ?? null;
+  }
+
+  /** The cat sees what she did (when it is at that Station), at most every few seconds. */
+  private onSmash(name: string, kind: Kind, at: THREE.Vector3) {
+    let first = false;
+    try { first = !localStorage.getItem(SMASHED_KEY); localStorage.setItem(SMASHED_KEY, '1'); } catch { /* the gasp is just not remembered */ }
+    if (Math.abs(this.cat.group.position.x - at.x) > 0.6) return;
+    if (!first && this.smashTalkT < SMASH_TALK_GAP) return;
+    this.smashTalkT = 0;
+    this.cat.say(first ? `${PLAYER_NAME}?! My KITCHEN!!` : pick(SMASH_LINES[kind === 'tile' ? 'tile' : name] ?? SMASH_LINES.tile), 'ooh');
+    this.cat.hop();
   }
 
   // ---- idle ---------------------------------------------------------------------
@@ -420,6 +473,7 @@ export class Game {
 
   startRecipe(flavor: Flavor) {
     this.keepCake();
+    this.smash.rebuildAll();
     this.phase = 'baking';
     this.hud.chevrons(false);
     this.hud.cue(null);
@@ -858,6 +912,7 @@ export class Game {
   // ---- per frame --------------------------------------------------------------------
 
   private update(dt: number, t: number) {
+    this.smashTalkT += dt;
     this.current?.update(dt, t);
     this.confetti.update(dt);
     this.feed?.update(dt, t);

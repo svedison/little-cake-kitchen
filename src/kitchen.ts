@@ -5,6 +5,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { Pointer } from './input';
 import { Rail, STATION_X } from './camera';
 import { motion, easeInOutCubic } from './motion';
+import { TileWall, TILES } from './smash';
 
 export const P = {
   cream: 0xfff6e9,
@@ -81,6 +82,8 @@ export class Kitchen {
   /** Smoothed frames per second, for tuning on a real phone. */
   fps = 60;
   time = 0;
+  /** The backsplash, tile by tile. */
+  tiles!: TileWall;
   /** Game seconds run this many times slower than real ones (`?slowmo=4`); for looking at pours. */
   slowmo = Math.max(1, Number(new URLSearchParams(location.search).get('slowmo')) || 1);
   /** The biggest camera jump (a move in one frame that no timeline or swipe explains) since resetRailStats(); a test driver watches it. */
@@ -290,14 +293,8 @@ export class Kitchen {
     );
     wall.position.set(0, 0.75, -0.55);
     this.scene.add(wall);
-    // A tiled backsplash along the counter, so no Station looks onto a bare wall.
-    const tiles = new THREE.Mesh(
-      new THREE.PlaneGeometry(5, TILES.h),
-      new THREE.MeshStandardMaterial({ map: tileTexture(5 / TILES.size, TILES.h / TILES.size), emissive: 0xffffff, emissiveIntensity: 0.12, roughness: 0.6 }),
-    );
-    tiles.position.set(0, TILES.h / 2, -0.549);
-    tiles.receiveShadow = true;
-    this.scene.add(tiles);
+    // A tiled backsplash along the counter, so no Station looks onto a bare wall (smash.ts can knock its tiles out).
+    this.tiles = new TileWall(this.scene);
     const trim = new THREE.Mesh(new THREE.BoxGeometry(5, 0.012, 0.012), new THREE.MeshStandardMaterial({ color: P.pink, roughness: 0.6 }));
     trim.position.set(0, TILES.h, -0.544);
     this.scene.add(trim);
@@ -305,34 +302,4 @@ export class Kitchen {
     const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.02, 0));
     this.world.createCollider(RAPIER.ColliderDesc.cuboid(1.8, 0.02, 0.55).setFriction(0.9), body);
   }
-}
-
-/** The backsplash: 5 cm square tiles up to 34 cm above the counter. */
-const TILES = { size: 0.05, h: 0.34 };
-
-/** Cream tiles with soft grout and a pink one here and there, repeated over the backsplash. */
-function tileTexture(rx: number, ry: number) {
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const g = c.getContext('2d')!;
-  g.fillStyle = '#f4dcd6'; // grout
-  g.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 4; i++) {
-    for (let j = 0; j < 4; j++) {
-      g.fillStyle = (i * 3 + j * 2) % 7 === 0 ? '#ffd3dc' : '#fffaf3';
-      g.beginPath();
-      g.roundRect(i * 64 + 3, j * 64 + 3, 58, 58, 8);
-      g.fill();
-      g.fillStyle = 'rgba(255,255,255,0.7)'; // a glint on each tile's top-left
-      g.beginPath();
-      g.roundRect(i * 64 + 9, j * 64 + 8, 18, 5, 3);
-      g.fill();
-    }
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(rx / 4, ry / 4);
-  t.anisotropy = 4;
-  return t;
 }

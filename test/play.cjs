@@ -1599,6 +1599,11 @@ async function play(page, aim, prefix) {
   await page.waitForTimeout(900);
   await shot('reveal');
   {
+    // the secret smashing never goes off in an ordinary bake (careful carries are never hits)
+    const sm = await page.evaluate(() => window.__game.smash());
+    if (sm.hits) problem(`an ordinary bake smashed the scenery: ${sm.hits} hits, ${sm.breaks} breaks`);
+  }
+  {
     const w = await page.evaluate(() => { window.__watch.done = true; return window.__watch; });
     log.push(`watch: door max ${w.doorMax.toFixed(3)} rad, door at the step change ${w.doorAtChange}, pan/cake gap ${w.gapFrames} frames (${Math.round(w.maxGapMs)} ms), min pan-door gap ${(w.minDoorGap * 1000).toFixed(2)} mm over ${w.slidingFrames} frames`);
     if (w.doorMax > 1.7) problem(`the oven door opened to ${w.doorMax.toFixed(3)} rad (more than 1.7)`);

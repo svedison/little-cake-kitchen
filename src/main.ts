@@ -247,4 +247,6 @@ const probe = () => {
   /** A world point in CSS pixels, for drivers sampling a spot of the Kitchen. */
   screenOf: (x: number, y: number, z: number) => kitchen.toScreen(new Vector3(x, y, z)),
   slowmo: (n: number) => { kitchen.slowmo = Math.max(1, n || 1); },
+  /** The secret smashing: hits, breaks, what can break and how it is doing. */
+  smash: () => game.smash.info(),
 };

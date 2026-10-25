@@ -306,11 +306,12 @@ async function play(page, aim, prefix) {
       await shot(`s6-bake-${s.stage}`);
       const tt = await page.evaluate(() => window.__game.targets());
       // Once it smokes, the darkest of five spots across the top: a grey puff over one of them is not the crust.
-      const spots = s.stage === 'charred' ? [[0, 0], [-18, 0], [18, 0], [0, -6], [0, 6]] : [[0, 0]];
+      // (8 px nearer than the middle: on a portrait phone the middle sits on the pan's far rim behind the crown)
+      const spots = s.stage === 'charred' ? [[0, 8], [-18, 8], [18, 8], [0, 2], [0, 14]] : [[0, 8]];
       const px = tt.top ? await darkestSpot(tt.top.x, tt.top.y, spots) : null;
       const d = await page.evaluate(() => window.__game.debug());
       stages[s.stage] = { px, smoke: d.smoke };
-      log.push(`s6 ${s.stage} at p=${s.progress.toFixed(2)}: top ${px && px.join(',')} smoke ${d.smoke}`);
+      log.push(`s6 ${s.stage} at p=${s.progress.toFixed(2)}: top ${px && px.join(',')} at ${tt.top ? `${Math.round(tt.top.x)},${Math.round(tt.top.y)}` : '-'} smoke ${d.smoke}`);
       if (s.stage === 'charred' || s.stage === 'burnt') await counterCheck(`s6-bake-${s.stage}`);
       // The cat calls the stages from beside the oven; on the burnt one it says to let go.
       // (On a phone the lean-in is no wider than the window: the cat on the oven is just off the

@@ -8,7 +8,7 @@ import { Cat, CHOMP } from './cat';
 import { Hud } from './hud';
 import { Carry, nudge } from './gestures';
 import { Confetti } from './confetti';
-import { makePan, makeOven, makeHob, makeCrock, makePlant, makeFridge, makeShelf, makeBook, makeCake, makeOtherCake, makeVerdictTag, makePlate, SHELF, FRIDGE } from './props';
+import { makePan, makeOven, makeHob, makeCrock, makePlant, makeCanister, makeMitt, makeFridge, makeShelf, makeBook, makeCake, makeOtherCake, makeVerdictTag, makePlate, SHELF, FRIDGE } from './props';
 import { motion, easeInOutCubic, easeOutCubic, easeOutBack } from './motion';
 import { BASQUE, VERDICTS, CHEERS, displayName, type Flavor, type StepDef } from './recipes';
 import { loadGallery, saveGallery, type CakeEntry } from './gallery';
@@ -43,6 +43,8 @@ const SMASH_LINES: Record<string, string[]> = {
   plant: ['BASIL! Noooo!', 'What did Basil ever do to you?!'],
   pot: ['That was my favourite pot!', 'Why the pot?!'],
   moka: ['My COFFEE!!', 'No more coffee for us...'],
+  canister: ['The SUGAR!!', 'Sweep that up before the ants come!'],
+  mitt: ['How do you even break a mitt?!', 'My mitt!!'],
   hob: ['The hob!? ...good thing we have an oven.', 'Okay that was kind of cool.'],
 };
 /** s between the cat's cries, however much breaks. */
@@ -217,12 +219,23 @@ export class Game {
     const plant = makePlant();
     plant.position.set(-0.19, 0, -0.45);
     k.scene.add(plant);
+    // A sugar canister and an oven mitt either side of the pan's spot at the Stove: a portrait
+    // phone sees only the oven there, not the hob, so these keep something in reach on every screen.
+    const canister = makeCanister();
+    canister.position.set(STATION_X.stove - 0.13, 0, 0.065);
+    k.scene.add(canister);
+    const mitt = makeMitt();
+    mitt.position.set(STATION_X.stove + 0.135, 0, 0.02);
+    mitt.rotation.y = 0.5;
+    k.scene.add(mitt);
     this.smash = new Smash(k, k.tiles, () => this.swinging(), { broke: (name, kind, at) => this.onSmash(name, kind, at) });
     this.smash.add('hob', hob.getObjectByName('hobBase')!, 'ceramic', 300);
     this.smash.add('pot', hob.getObjectByName('pot')!, 'ceramic', 200);
     this.smash.add('moka', hob.getObjectByName('moka')!, 'metal', 150);
     this.smash.add('crock', crock, 'ceramic', 150);
     this.smash.add('plant', plant, 'plant', 100);
+    this.smash.add('canister', canister, 'ceramic', 120);
+    this.smash.add('mitt', mitt, 'plant', 80);
     // The fridge stands against the wall right behind the Shelf, so a phone sees both whole.
     this.fridge.position.set(STATION_X.fridge, 0, -0.545 + FRIDGE.d / 2);
     k.scene.add(this.fridge);

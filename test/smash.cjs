@@ -15,7 +15,8 @@ fs.rmSync(SHOTS, { recursive: true, force: true });
 fs.mkdirSync(SHOTS, { recursive: true });
 const EXE = process.env.CHROME_PATH || 'C:\\Users\\ediso\\AppData\\Local\\ms-playwright\\chromium-1178\\chrome-win\\chrome.exe';
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.wasm': 'application/wasm', '.mp3': 'audio/mpeg', '.woff2': 'font/woff2', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
-const viewport = process.argv[2] === 'desktop' ? { width: 1280, height: 800 } : { width: 390, height: 844 };
+const desktop = process.argv[2] === 'desktop';
+const viewport = desktop ? { width: 1280, height: 800 } : { width: 412, height: 915 };
 const problems = [];
 const log = [];
 const problem = (t) => problems.push(t);
@@ -33,12 +34,22 @@ const server = http.createServer((req, res) => {
   await new Promise((r) => server.listen(0, r));
   const browser = await chromium.launch({ executablePath: fs.existsSync(EXE) ? EXE : undefined, headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
   try {
-    const page = await (await browser.newContext({ viewport })).newPage();
+    // the phone is a real touch phone: a mobile viewport (at 1x: software rendering at 3x is too slow to swing), fingers through CDP touch events
+    const page = await (await browser.newContext(desktop ? { viewport } : { viewport, isMobile: true, hasTouch: true, deviceScaleFactor: 1 })).newPage();
+    const cdp = desktop ? null : await page.context().newCDPSession(page);
+    let fx = 0, fy = 0;
+    const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, radiusX: 8, radiusY: 8, force: 1, id: 1 }] });
+    const finger = desktop ? page.mouse : {
+      move: async (x, y, o) => { const n = (o && o.steps) || 1; for (let k = 1; k <= n; k++) await touch('touchMove', fx + (x - fx) * k / n, fy + (y - fy) * k / n); fx = x; fy = y; },
+      down: async () => touch('touchStart', fx, fy),
+      up: async () => touch('touchEnd', fx, fy),
+    };
+    if (!desktop) { const m = finger.move; finger.move = async (x, y, o) => { if (!finger.isDown) { fx = x; fy = y; return; } return m(x, y, o); }; const d = finger.down, u = finger.up; finger.down = async () => { finger.isDown = true; return d(); }; finger.up = async () => { finger.isDown = false; return u(); }; }
     page.on('console', (m) => { if (m.type() === 'error') problem(`console.error: ${m.text()}`); });
     page.on('pageerror', (e) => problem(`pageerror: ${e.message}`));
     await page.goto(`http://localhost:${server.address().port}/`, { timeout: 120000, waitUntil: 'commit' });
     await page.waitForFunction(() => window.__game && !document.getElementById('start').disabled, null, { timeout: 60000 });
-    await page.click('#start');
+    await (desktop ? page.click('#start') : page.tap('#start'));
     await page.waitForTimeout(1200);
     let n = 0;
     const shot = (name) => page.screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}-${name}.png`) });
@@ -58,25 +69,27 @@ const server = http.createServer((req, res) => {
 
     // a careful drag is never a hit: the parchment goes to the pan slowly
     const sheet = (await page.evaluate(() => window.__game.targets())).sheet;
-    await page.mouse.move(sheet.x, sheet.y);
-    await page.mouse.down();
-    for (let k = 1; k <= 30; k++) { await page.mouse.move(sheet.x, sheet.y - k * 2); await page.waitForTimeout(30); }
-    await page.mouse.up();
+    await finger.move(sheet.x, sheet.y);
+    await finger.down();
+    for (let k = 1; k <= 30; k++) { await finger.move(sheet.x, sheet.y - k * 2); await page.waitForTimeout(30); }
+    await finger.up();
     await page.waitForTimeout(700);
     if ((await info()).hits) problem('a slow drag counted as a hit');
 
     // swing the parchment back and forth through the crock until it gives
     const at = (await page.evaluate(() => window.__game.targets())).sheet;
-    await page.mouse.move(at.x, at.y);
-    await page.mouse.down();
+    await finger.move(at.x, at.y);
+    await finger.down();
     const cx = crock.screen.x, cy = crock.screen.y;
     let shotHit = false, broke = null;
     for (let swing = 0; swing < 40 && !broke; swing++) {
-      const from = swing % 2 ? cx + 90 : cx - 90;
-      const to = swing % 2 ? cx - 90 : cx + 90;
-      await page.mouse.move(from, cy, { steps: 2 });
+      // a finger cannot leave the glass: swing from well left of it to the screen's edge
+      const lo = Math.max(4, cx - 120), hi = Math.min(viewport.width - 4, cx + 90);
+      const from = swing % 2 ? hi : lo;
+      const to = swing % 2 ? lo : hi;
+      await finger.move(from, cy, { steps: 2 });
       await page.waitForTimeout(120);
-      await page.mouse.move(to, cy, { steps: 3 });
+      await finger.move(to, cy, { steps: 3 });
       await page.waitForTimeout(40);
       const i = await info();
       if (i.hits && !shotHit) {
@@ -96,7 +109,7 @@ const server = http.createServer((req, res) => {
         await shot('crock-breaks');
       }
     }
-    await page.mouse.up();
+    await finger.up();
     if (!shotHit) problem('40 hard swings through the crock never hit it');
     if (!broke) problem('the crock never broke');
     else {
@@ -115,16 +128,16 @@ const server = http.createServer((req, res) => {
     const wall = await page.evaluate(() => window.__game.screenOf(0.12, 0.12, -0.549));
     const at2 = (await page.evaluate(() => window.__game.targets())).sheet;
     const before = (await info()).breaks;
-    await page.mouse.move(at2.x, at2.y);
-    await page.mouse.down();
+    await finger.move(at2.x, at2.y);
+    await finger.down();
     for (let swing = 0; swing < 30; swing++) {
-      await page.mouse.move(wall.x + (swing % 3 - 1) * 25, wall.y + 120, { steps: 2 });
+      await finger.move(wall.x + (swing % 3 - 1) * 25, wall.y + 120, { steps: 2 });
       await page.waitForTimeout(110);
-      await page.mouse.move(wall.x + (swing % 3 - 1) * 25, wall.y - 40, { steps: 2 });
+      await finger.move(wall.x + (swing % 3 - 1) * 25, wall.y - 40, { steps: 2 });
       await page.waitForTimeout(40);
       if ((await info()).breaks - before >= 3) break;
     }
-    await page.mouse.up();
+    await finger.up();
     const iw = await info();
     const tiles = iw.targets.filter((t) => t.kind === 'tile');
     log.push(`backsplash: ${tiles.length} tiles hit, ${tiles.filter((t) => t.broken).length} broken`);

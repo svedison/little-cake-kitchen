@@ -1113,3 +1113,36 @@ export function makeOtherCake(recipe: string) {
   g.add(body, top);
   return shadowed(g);
 }
+
+/** A pink sugar canister with a wooden lid, for the counter beside the oven. Origin on the counter. */
+export function makeCanister() {
+  const g = new THREE.Group();
+  const prof = [[0, 0], [0.027, 0], [0.03, 0.005], [0.03, 0.062], [0.027, 0.066]];
+  const body = new THREE.Mesh(new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x, y)), 24), mat(P.pink, { roughness: 0.4 }));
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.029, 0.029, 0.008, 24), mat(0xd9a46c, { roughness: 0.7 }));
+  lid.position.y = 0.069;
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.007, 12, 8), mat(0xd9a46c, { roughness: 0.7 }));
+  knob.position.y = 0.077;
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0305, 0.0305, 0.012, 24, 1, true), mat(0xffffff, { roughness: 0.5 }));
+  band.position.y = 0.032;
+  g.add(body, lid, knob, band);
+  return shadowed(g);
+}
+
+/** A quilted oven mitt lying flat, thumb out, for the counter beside the oven. Origin on the counter. */
+export function makeMitt() {
+  const g = new THREE.Group();
+  const cloth = mat(P.matcha, { roughness: 0.9 });
+  const hand = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), cloth);
+  hand.scale.set(0.032, 0.011, 0.045);
+  hand.position.set(0, 0.011, -0.012);
+  const thumb = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), cloth);
+  thumb.scale.set(0.012, 0.009, 0.022);
+  thumb.position.set(0.031, 0.009, 0.0);
+  thumb.rotation.y = 0.6;
+  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 20).rotateX(Math.PI / 2), mat(0xfff4ea, { roughness: 0.9 }));
+  cuff.scale.y = 0.4;
+  cuff.position.set(0, 0.01, 0.034);
+  g.add(hand, thumb, cuff);
+  return shadowed(g);
+}

@@ -28,6 +28,14 @@ const BUILD_T = 0.6;
 const BAR_T = 2.2;
 /** m: how close to the weak point a hit lands to count as one. */
 const WEAK_R = 0.03;
+/** m: how much nearer or further than a target the held thing may be and still hit it (what lines up on screen does). */
+const DEPTH_GAP = 0.12;
+/** m: how far in front of the backsplash the held thing may be and still knock a tile. */
+const WALL_GAP = 0.1;
+/** px a damage number pops above the hit on a touch screen, so the fingertip doesn't cover it. */
+const FINGER_LIFT = 52;
+/** ms of buzz for a hit, a weak-point hit and a break, standing in on a phone for the screen shake a fingertip can't feel. */
+const BUZZ = { hit: 12, crit: [12, 30, 22], break: [30, 20, 45] };
 const MAX_CHUNKS = 260;
 const WHITE = new THREE.Color(0xffffff);
 const GRAVITY = 7;
@@ -248,6 +256,16 @@ export class Smash {
   private readonly wCentre = new THREE.Vector3();
   private readonly v = new THREE.Vector3();
   private readonly v2 = new THREE.Vector3();
+  private readonly v3 = new THREE.Vector3();
+  private readonly sPrev = new THREE.Vector2();
+  private readonly sVel = new THREE.Vector2();
+  private readonly s2 = new THREE.Vector2();
+  private readonly s3 = new THREE.Vector2();
+  private readonly sNow = new THREE.Vector2();
+  private readonly wRect = new THREE.Box2();
+  private readonly tRect = new THREE.Box2();
+  private readonly ray = new THREE.Raycaster();
+  private readonly wallPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -(TILES.z + TILE_D));
   private readonly m4 = new THREE.Matrix4();
   private readonly q = new THREE.Quaternion();
   private readonly c = new THREE.Color();
@@ -367,13 +385,19 @@ export class Smash {
     }
   }
 
-  /** Follow the held thing; a fast touch on the scenery is a hit. */
+  /**
+   * Follow the held thing; a fast touch on the scenery is a hit. A hit is judged the way she
+   * sees it: the held thing has to cover the target on screen and be about as far away as it.
+   * On a portrait phone the camera looks steeply down, so a thing swung "through" the crock on
+   * screen is really passing a few centimetres in front of it; boxes alone would never meet.
+   */
   private swing(dt: number) {
     const w = this.held();
     if (w !== this.weapon) {
       this.weapon = w;
       this.wVel.set(0, 0, 0);
-      if (w) { this.wBox.setFromObject(w); this.wBox.getCenter(this.wPrev); }
+      this.sVel.set(0, 0);
+      if (w) { this.wBox.setFromObject(w); this.wBox.getCenter(this.wPrev); this.sPrev.copy(this.ndc(this.wPrev)); }
       return;
     }
     if (!w) return;
@@ -382,35 +406,85 @@ export class Smash {
     const raw = this.v.copy(this.wCentre).sub(this.wPrev).divideScalar(dt);
     this.wVel.lerp(raw, 0.6);
     this.wPrev.copy(this.wCentre);
+    const sNow = this.sNow.copy(this.ndc(this.wCentre));
+    this.sVel.lerp(this.s2.copy(sNow).sub(this.sPrev).divideScalar(dt), 0.6);
+    this.sPrev.copy(sNow);
     const speed = this.wVel.length();
     if (speed < MIN_SPEED) return;
+    const cam = this.k.camera.position;
+    const wDist = cam.distanceTo(this.wCentre);
+    const wRect = this.rect(this.wBox, this.wRect);
     // things on the counter
     for (const t of this.targets) {
-      if (t.broken || t.cooldown > 0 || !this.wBox.intersectsBox(t.box)) continue;
-      // moving into it, not pulling away
-      if (this.v2.copy(t.centre).sub(this.wCentre).dot(this.wVel) <= 0) continue;
-      const at = t.box.clampPoint(this.wCentre, new THREE.Vector3());
-      this.hit(t, at, speed);
+      if (t.broken || t.cooldown > 0) continue;
+      const tRect = this.rect(t.box, this.tRect);
+      if (!this.wBox.intersectsBox(t.box) && !(rectsMeet(wRect, tRect) && this.nearInDepth(t.box, wDist))) continue;
+      // moving into it on screen, not pulling away
+      const tc = this.ndc(t.centre);
+      if ((tc.x - sNow.x) * this.sVel.x + (tc.y - sNow.y) * this.sVel.y <= 0) continue;
+      this.hit(t, this.landing(t.box), speed);
     }
-    // the backsplash: up to two tiles nearest where it lands
-    if (this.wBox.min.z <= TILES.z + TILE_D + 0.004 && this.wBox.min.y < TILES.h && this.wVel.z < 0) {
-      const y0 = Math.max(0, this.wBox.min.y), y1 = Math.min(TILES.h - 1e-4, this.wBox.max.y);
-      const found: { n: number; d: number }[] = [];
-      for (let y = y0; y <= y1 + 1e-6; y += TILES.size * 0.5) {
-        for (let x = this.wBox.min.x; x <= this.wBox.max.x + 1e-6; x += TILES.size * 0.5) {
-          const n = this.wall.at(x, Math.min(y, y1));
-          if (n < 0 || found.some((f) => f.n === n)) continue;
-          const c = this.wall.centre(n, this.v2);
-          found.push({ n, d: Math.hypot(c.x - this.wCentre.x, c.y - this.wCentre.y) });
-        }
-      }
-      found.sort((a, b) => a.d - b.d);
-      for (const { n } of found.slice(0, 2)) {
-        const t = this.tileTarget(n);
-        if (t.broken || t.cooldown > 0) continue;
-        this.hit(t, t.centre.clone().setZ(TILES.z + TILE_D), speed);
+    // the backsplash: up to two tiles nearest where it lands, seen through the held thing
+    if (this.wVel.z >= 0 && this.sVel.y <= 0) return;
+    const plane = this.wallPlane;
+    const found: { n: number; d: number }[] = [];
+    let centreHit: THREE.Vector3 | null = null;
+    for (let gy = 0; gy <= 2; gy++) {
+      for (let gx = 0; gx <= 2; gx++) {
+        const x = THREE.MathUtils.lerp(wRect.min.x, wRect.max.x, gx / 2);
+        const y = THREE.MathUtils.lerp(wRect.min.y, wRect.max.y, gy / 2);
+        this.ray.setFromCamera(this.s2.set(x, y), this.k.camera);
+        const p = this.ray.ray.intersectPlane(plane, this.v2);
+        if (!p) continue;
+        if (gx === 1 && gy === 1) centreHit = p.clone();
+        // close enough to the wall to be touching it (the held thing is no further than WALL_GAP in front)
+        if (cam.distanceTo(p) - wDist > WALL_GAP) continue;
+        const n = this.wall.at(p.x, p.y);
+        if (n < 0 || found.some((f) => f.n === n)) continue;
+        found.push({ n, d: 0 });
       }
     }
+    if (!found.length) return;
+    const at = centreHit ?? this.wCentre;
+    for (const f of found) { const c = this.wall.centre(f.n, this.v2); f.d = Math.hypot(c.x - at.x, c.y - at.y); }
+    found.sort((a, b) => a.d - b.d);
+    for (const { n } of found.slice(0, 2)) {
+      const t = this.tileTarget(n);
+      if (t.broken || t.cooldown > 0) continue;
+      this.hit(t, t.centre.clone().setZ(TILES.z + TILE_D), speed);
+    }
+  }
+
+  /** NDC of a world point. */
+  private ndc(p: THREE.Vector3) {
+    this.v3.copy(p).project(this.k.camera);
+    return this.s3.set(this.v3.x, this.v3.y);
+  }
+
+  /** A box's rectangle on screen (NDC). */
+  private rect(b: THREE.Box3, out: THREE.Box2) {
+    out.makeEmpty();
+    for (let i = 0; i < 8; i++) {
+      this.v3.set(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).project(this.k.camera);
+      out.expandByPoint(this.s3.set(this.v3.x, this.v3.y));
+    }
+    return out;
+  }
+
+  /** The held thing is about as far from the camera as the box: not far in front of it, not behind it. */
+  private nearInDepth(b: THREE.Box3, wDist: number) {
+    this.ray.ray.origin.copy(this.k.camera.position);
+    this.ray.ray.direction.copy(this.wCentre).sub(this.k.camera.position).normalize();
+    const p = this.ray.ray.intersectBox(b, this.v3);
+    const d = p ? this.k.camera.position.distanceTo(p) : this.k.camera.position.distanceTo(b.getCenter(this.v3));
+    return d - wDist < DEPTH_GAP && wDist - d < DEPTH_GAP;
+  }
+
+  /** Where on the box the hit lands: where her eye, through the held thing, meets it. */
+  private landing(b: THREE.Box3) {
+    this.ray.ray.origin.copy(this.k.camera.position);
+    this.ray.ray.direction.copy(this.wCentre).sub(this.k.camera.position).normalize();
+    return this.ray.ray.intersectBox(b, new THREE.Vector3()) ?? b.clampPoint(this.wCentre, new THREE.Vector3());
   }
 
   private tileTarget(n: number) {
@@ -449,6 +523,7 @@ export class Smash {
     sound.play('whack', { gain: 0.45 + 0.4 * u, rate: r });
     sound.play(LAYER[t.kind], { gain: 0.35, rate: 0.9 });
     if (crit) sound.play('crit', { gain: 0.8 });
+    if (t.hp > 0) buzz(crit ? BUZZ.crit : BUZZ.hit);
     this.shakeAmp = Math.max(this.shakeAmp, 0.0015 + 0.0015 * u);
     if (t.hp <= 0) this.breakIt(t);
   }
@@ -498,6 +573,7 @@ export class Smash {
     }
     sound.play('smash', { gain: t.kind === 'tile' ? 0.55 : 0.85, rate: RATE[t.kind] * 0.85 });
     this.shakeAmp = Math.max(this.shakeAmp, t.kind === 'tile' ? 0.003 : 0.006);
+    buzz(BUZZ.break);
     this.events.broke(t.name, t.kind, t.centre.clone());
   }
 
@@ -648,7 +724,7 @@ export class Smash {
     el.className = crit ? 'dmg crit' : 'dmg';
     el.textContent = String(dmg);
     el.style.left = `${Math.round(THREE.MathUtils.clamp(s.x + (Math.random() - 0.5) * 30, 28, window.innerWidth - 28))}px`;
-    el.style.top = `${Math.round(THREE.MathUtils.clamp(s.y - 10, 30, window.innerHeight - 30))}px`;
+    el.style.top = `${Math.round(THREE.MathUtils.clamp(s.y - 10 - (touch() ? FINGER_LIFT : 0), 30, window.innerHeight - 30))}px`;
     this.layer.appendChild(el);
     window.setTimeout(() => el.remove(), 950);
   }
@@ -673,4 +749,16 @@ export class Smash {
       this.weakEl.style.top = `${Math.round(w.y)}px`;
     }
   }
+}
+
+/** Is this a touch screen (her phone), where a finger covers what it hits. */
+const touch = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+
+/** A short buzz where the phone can (Android; iOS has no web vibration and ignores it). */
+function buzz(pattern: number | number[]) {
+  try { if (touch()) navigator.vibrate?.(pattern); } catch { /* no buzz */ }
+}
+
+function rectsMeet(a: THREE.Box2, b: THREE.Box2) {
+  return a.max.x >= b.min.x && a.min.x <= b.max.x && a.max.y >= b.min.y && a.min.y <= b.max.y;
 }

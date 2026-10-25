@@ -12,7 +12,7 @@ export type SoundName =
   | 'crack' | 'plop' | 'tap' | 'clink' | 'paper' | 'door' | 'chomp' | 'confetti' | 'pop' | 'berry' | 'lemon'
   | 'grab' | 'drop' | 'slide' | 'swoosh' | 'book' | 'chip' | 'latch' | 'creak' | 'rack' | 'tick' | 'chime'
   | 'over' | 'meh' | 'pat' | 'bell' | 'gulp' | 'cheer' | 'squelch' | 'splash' | 'drip' | 'steam' | 'clunk' | 'slop' | 'tink'
-  | 'whack' | 'smash' | 'crit' | 'build';
+  | 'whack' | 'smash' | 'crit' | 'build' | 'mew' | 'growl' | 'hiss' | 'purr';
 export type LoopName = 'whisk' | 'pour' | 'oven' | 'flour' | 'tick' | 'glug' | 'sizzle';
 
 /** Physics a Loop can follow besides its level. */
@@ -134,6 +134,12 @@ const VOICES: Record<SoundName, Voice> = {
   // A weak point hit: a bright two-note ding over the whack.
   crit: { tones: [{ f: 1760, g: 0.16, d: 0.12, type: 'triangle' }, { f: 2637, g: 0.14, d: 0.22, at: 0.05, type: 'triangle' }] },
   // Something rebuilding: three quick rising blips.
+  // The cat, hit: a cross little mew (up, then down), a growl, and (on strike) a hiss.
+  mew: { tones: [{ f: 620, to: 1050, g: 0.14, d: 0.1, type: 'triangle' }, { f: 1050, to: 560, g: 0.13, d: 0.22, at: 0.09, type: 'triangle' }] },
+  growl: { tones: [{ f: 120, to: 95, g: 0.1, d: 0.5, type: 'sawtooth' }], tail: { type: 'lowpass', f: 420, q: 1.2, g: 0.16, a: 0.03, d: 0.45 } },
+  hiss: { tail: { type: 'highpass', f: 3200, q: 0.7, g: 0.32, a: 0.03, d: 0.55 } },
+  // Patted: a soft purr, a run of low rumbles.
+  purr: { modes: [{ f: 95, q: 2, g: 0.22, d: 0.05 }], repeat: { n: 10, gap: 0.05, jitter: 0.005, fall: 0.06 } },
   build: { tones: [{ f: 660, g: 0.05, d: 0.06, type: 'square' }, { f: 880, g: 0.05, d: 0.06, at: 0.07, type: 'square' }, { f: 1175, g: 0.05, d: 0.1, at: 0.14, type: 'square' }] },
 };
 

@@ -21,6 +21,8 @@ const STALE_MS = 80;   // a finger that paused this long before lifting has no m
 
 export class Pointer {
   readonly handlers: PointerHandler[] = [];
+  /** Offered a pointer-down before the handlers (patting the cat wins over a Step's hold-anywhere). */
+  readonly first: PointerHandler[] = [];
   readonly taps: ((x: number, y: number) => void)[] = [];
   /** A pointer-down nobody claimed. */
   readonly misses: ((x: number, y: number) => void)[] = [];
@@ -53,7 +55,7 @@ export class Pointer {
     this.moved = false;
     this.swiping = false;
     this.active = null;
-    for (const h of this.handlers) {
+    for (const h of [...this.first, ...this.handlers]) {
       if (h.down(e.clientX, e.clientY)) {
         this.active = h;
         for (const c of this.claims) c(h);

@@ -40,6 +40,12 @@ _Avoid_: Error, fail, mistake, penalty
 The hidden play nobody is told about: whatever the player is carrying, swung hard into the Scenery, damages it like a structure in a build-battle game (a damage number, a health bar, a weak point for double damage) until it bursts and later builds itself back. Only Scenery can be smashed; nothing a recipe needs ever breaks.
 _Avoid_: Destruction mode, rage mode, easter egg
 
+**Strike**:
+What the cat does when the player has hit it with a carried thing more than ten times: it turns red and furious, stops helping, and everything the player does in a Step runs at a tenth of its speed. Each hit before that makes it a little angrier. Hitting the cat is never a Smash (it never breaks).
+
+**Pat**:
+A touch on the cat itself. Three Pats after the last hit and the cat forgives the player: its anger is gone and a Strike ends. A Pat on a happy cat is just a purr.
+
 **Scenery**:
-The things in the Kitchen that no Step uses: the backsplash tiles, the hob and its pots, the crock of tools, the basil. The bowl, oven, pan, cat, book and Shelf are never Scenery.
+The things in the Kitchen that no Step uses: the backsplash tiles, the hob and its pots, the crock of tools, the basil, the sugar canister and the oven mitt. Each Station keeps its own Scenery in view on every screen. The bowl, oven, pan, cat, book and Shelf are never Scenery.
 _Avoid_: Decor, background, props

@@ -82,9 +82,9 @@ const server = http.createServer((req, res) => {
     await finger.down();
     const cx = crock.screen.x, cy = crock.screen.y;
     let shotHit = false, broke = null;
-    for (let swing = 0; swing < 40 && !broke; swing++) {
+    for (let swing = 0; swing < 80 && !broke; swing++) {
       // a finger cannot leave the glass: swing from well left of it to the screen's edge
-      const lo = Math.max(4, cx - 120), hi = Math.min(viewport.width - 4, cx + 90);
+      const lo = Math.max(4, cx - (desktop ? 120 : 90)), hi = Math.min(viewport.width - 4, cx + 90);
       const from = swing % 2 ? hi : lo;
       const to = swing % 2 ? lo : hi;
       await finger.move(from, cy, { steps: 2 });
@@ -110,7 +110,7 @@ const server = http.createServer((req, res) => {
       }
     }
     await finger.up();
-    if (!shotHit) problem('40 hard swings through the crock never hit it');
+    if (!shotHit) problem('80 hard swings through the crock never hit it');
     if (!broke) problem('the crock never broke');
     else {
       const i = await info();
@@ -124,10 +124,91 @@ const server = http.createServer((req, res) => {
       await shot('crock-gone');
     }
 
+    // the cat: hit it past ten and it goes on strike (everything slows), pat it three times and it forgives
+    const mood = () => page.evaluate(() => window.__game.catMood());
+    /** Seconds the carried parchment takes to cover half of a quick 80 px move (the page watches every frame). */
+    const followFrac = async () => {
+      const a = (await page.evaluate(() => window.__game.targets())).sheet;
+      await finger.move(a.x, a.y);
+      await finger.down();
+      await page.waitForTimeout(200);
+      const watch = page.evaluate((x0) => new Promise((done) => {
+        const t0 = performance.now();
+        const f = () => {
+          const x = window.__game.targets().sheet.x;
+          if (x - x0 >= 40 || performance.now() - t0 > 6000) return done((performance.now() - t0) / 1000);
+          requestAnimationFrame(f);
+        };
+        f();
+      }), a.x);
+      await finger.move(a.x + 80, a.y);
+      const t = await watch;
+      await finger.up();
+      return t;
+    };
+    // on strike a dropped thing creeps home ten times slower, and can't be picked up on the way
+    const settle = async () => {
+      for (let i = 0; i < 100; i++) {
+        if (!(await page.evaluate(() => window.__game.debug().carry?.settling))) return;
+        await page.waitForTimeout(300);
+      }
+      problem('the parchment never got home');
+    };
+    await settle();
+    const before = await followFrac();
+    await page.waitForTimeout(1500);
+    let m = await mood();
+    const at3 = (await page.evaluate(() => window.__game.targets())).sheet;
+    await finger.move(at3.x, at3.y);
+    await finger.down();
+    const said = [];
+    for (let swing = 0; swing < 60 && m.hits <= 10; swing++) {
+      const cxx = m.body.x, cyy = m.body.y;
+      const lo = Math.max(4, cxx - 110), hi = Math.min(viewport.width - 4, cxx + 190);
+      await finger.move(swing % 2 ? hi : lo, cyy, { steps: 2 });
+      await page.waitForTimeout(120);
+      await finger.move(swing % 2 ? lo : hi, cyy, { steps: 3 });
+      await page.waitForTimeout(60);
+      const was = m.hits;
+      m = await mood();
+      if (m.hits > was) said.push(`${m.hits}:${m.expr}:"${await page.locator('#bubble').innerText().catch(() => '')}"`);
+      if (m.hits === 1 && was === 0) await shot('cat-hit');
+      if (m.hits >= 5 && was < 5) await shot('cat-mad');
+    }
+    await finger.up();
+    log.push(`cat hits: ${said.join(' | ')}`);
+    if (!m.strike) problem(`the cat was hit ${m.hits} times and did not go on strike`);
+    if (m.expr !== 'furious') problem(`the cat on strike looks ${m.expr}, not furious`);
+    await page.waitForTimeout(400);
+    await shot('cat-strike');
+    await settle();
+    const during = await followFrac();
+    log.push(`the parchment takes ${before.toFixed(2)} s to cover half a quick move normally, ${during.toFixed(2)} s on strike`);
+    if (!(during > before * 4 && during > 0.8)) problem(`on strike the parchment is not much slower (${before.toFixed(2)} s -> ${during.toFixed(2)} s)`);
+    await settle();
+    // three pats
+    for (let i = 0; i < 3; i++) {
+      const f = (await mood()).body;
+      await finger.move(f.x, f.y);
+      await finger.down();
+      await page.waitForTimeout(80);
+      await finger.up();
+      await page.waitForTimeout(500);
+      const mm = await mood();
+      log.push(`pat ${i + 1}: hits ${mm.hits}, pats ${mm.pats}, strike ${mm.strike}, "${await page.locator('#bubble').innerText().catch(() => '')}"`);
+    }
+    m = await mood();
+    await shot('cat-forgives');
+    if (m.strike || m.hits) problem(`three pats did not end the strike (hits ${m.hits}, strike ${m.strike})`);
+    const after = await followFrac();
+    log.push(`after the pats it takes ${after.toFixed(2)} s`);
+    if (after > before * 2 + 0.1) problem(`after the pats the parchment is still slow (${after.toFixed(2)} s)`);
+    await page.waitForTimeout(1500);
+
     // the backsplash: swing up into the wall right of the bowl
     const wall = await page.evaluate(() => window.__game.screenOf(0.12, 0.12, -0.549));
     const at2 = (await page.evaluate(() => window.__game.targets())).sheet;
-    const before = (await info()).breaks;
+    const breaks0 = (await info()).breaks;
     await finger.move(at2.x, at2.y);
     await finger.down();
     for (let swing = 0; swing < 30; swing++) {
@@ -135,7 +216,7 @@ const server = http.createServer((req, res) => {
       await page.waitForTimeout(110);
       await finger.move(wall.x + (swing % 3 - 1) * 25, wall.y - 40, { steps: 2 });
       await page.waitForTimeout(40);
-      if ((await info()).breaks - before >= 3) break;
+      if ((await info()).breaks - breaks0 >= 3) break;
     }
     await finger.up();
     const iw = await info();

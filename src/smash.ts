@@ -30,6 +30,10 @@ const BAR_T = 2.2;
 const WEAK_R = 0.03;
 /** m: how much nearer or further than a target the held thing may be and still hit it (what lines up on screen does). */
 const DEPTH_GAP = 0.12;
+/** m: the same for the cat: it sits right at the front of the counter, so what covers it on screen nearly always passes in front of it. */
+const CAT_DEPTH_GAP = 0.3;
+/** cos of the widest angle between the held thing's travel and the target for a hit (60 degrees). */
+const APPROACH = 0.5;
 /** m: how far in front of the backsplash the held thing may be and still knock a tile. */
 const WALL_GAP = 0.1;
 /** px a damage number pops above the hit on a touch screen, so the fingertip doesn't cover it. */
@@ -225,6 +229,9 @@ interface Chunk { pos: THREE.Vector3; vel: THREE.Vector3; axis: THREE.Vector3; s
 interface Puff { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; age: number; life: number; size: number; alive: boolean }
 
 /** What Game needs to hear about. */
+/** Something alive (the cat): it is hit like the scenery but never breaks; whoever added it reacts. */
+interface Living { obj: THREE.Object3D; enabled: () => boolean; onHit: (at: THREE.Vector3, speed: number) => void; cooldown: number; box: THREE.Box3; centre: THREE.Vector3 }
+
 export interface SmashEvents {
   /** Something gave way (its name, its kind and where it was). */
   broke(name: string, kind: Kind, at: THREE.Vector3): void;
@@ -232,8 +239,17 @@ export interface SmashEvents {
 
 export class Smash {
   readonly targets: Target[] = [];
+  private readonly living: Living[] = [];
+  /** The last few hits (what, with what, how fast, when), for the test driver. */
+  private readonly hitLog: string[] = [];
+  private logHit(name: string, speed: number) {
+    this.hitLog.push(`${name} by ${this.weapon?.name || 'held'} at ${speed.toFixed(2)} m/s (t=${this.k.time.toFixed(1)})`);
+    if (this.hitLog.length > 12) this.hitLog.shift();
+  }
   /** Hits and breaks so far, for the test driver. */
   hits = 0;
+  /** Of the hits, how many landed on the cat. */
+  catHits = 0;
   breaks = 0;
   crits = 0;
   private readonly tileTargets = new Map<number, Target>();
@@ -342,6 +358,34 @@ export class Smash {
     });
   }
 
+  /** Something alive that can be hit (and reacts to it) but never breaks. */
+  addLiving(obj: THREE.Object3D, enabled: () => boolean, onHit: (at: THREE.Vector3, speed: number) => void) {
+    this.living.push({ obj, enabled, onHit, cooldown: 0, box: new THREE.Box3(), centre: new THREE.Vector3() });
+  }
+
+  /** A piece of scenery was moved (to keep it on screen): it lives there now. */
+  moved(obj: THREE.Object3D) {
+    const t = this.targets.find((x) => x.obj === obj);
+    if (!t) return;
+    obj.updateWorldMatrix(true, true);
+    t.home.copy(obj.position);
+    t.box.setFromObject(obj);
+    t.box.getCenter(t.centre);
+    t.weak = null;
+  }
+
+  /** Pop a mark (an anger vein over the cat) at a world point. */
+  mark(at: THREE.Vector3, text: string, cls: string) {
+    const s = this.k.toScreen(at);
+    const el = document.createElement('span');
+    el.className = cls;
+    el.textContent = text;
+    el.style.left = `${Math.round(THREE.MathUtils.clamp(s.x, 24, window.innerWidth - 24))}px`;
+    el.style.top = `${Math.round(THREE.MathUtils.clamp(s.y, 30, window.innerHeight - 30))}px`;
+    this.layer.appendChild(el);
+    window.setTimeout(() => el.remove(), 1000);
+  }
+
   /** Every broken thing builds itself back up now (a new recipe begins). */
   rebuildAll() {
     for (const t of this.targets) if (t.broken && t.build < 0) this.startBuild(t);
@@ -352,7 +396,8 @@ export class Smash {
   info() {
     const all = [...this.targets, ...this.tileTargets.values()];
     return {
-      hits: this.hits, breaks: this.breaks, crits: this.crits,
+      hits: this.hits, breaks: this.breaks, crits: this.crits, catHits: this.catHits, hitLog: [...this.hitLog],
+      living: this.living.map((l) => { const b = new THREE.Box3().setFromObject(l.obj); return { min: b.min.toArray().map((v) => +v.toFixed(3)), max: b.max.toArray().map((v) => +v.toFixed(3)), lo: this.k.toScreen(b.min), hi: this.k.toScreen(b.max) }; }),
       chunks: this.chunks.filter((c) => c.alive).length,
       speed: this.wVel.length(),
       weapon: this.weapon?.name || (this.weapon ? 'held' : null),
@@ -370,6 +415,7 @@ export class Smash {
 
   private update(dt: number) {
     if (dt <= 0) return;
+    for (const l of this.living) l.cooldown = Math.max(0, l.cooldown - dt);
     this.swing(dt);
     for (const t of this.targets) this.tick(t, dt);
     for (const t of this.tileTargets.values()) this.tick(t, dt);
@@ -419,10 +465,33 @@ export class Smash {
       if (t.broken || t.cooldown > 0) continue;
       const tRect = this.rect(t.box, this.tRect);
       if (!this.wBox.intersectsBox(t.box) && !(rectsMeet(wRect, tRect) && this.nearInDepth(t.box, wDist))) continue;
-      // moving into it on screen, not pulling away
+      // moving into it on screen, not past it or pulling away
       const tc = this.ndc(t.centre);
-      if ((tc.x - sNow.x) * this.sVel.x + (tc.y - sNow.y) * this.sVel.y <= 0) continue;
+      if (this.approach(tc, sNow) < APPROACH) continue;
       this.hit(t, this.landing(t.box), speed);
+    }
+    // the cat (never the thing it is being fed, never while it eats)
+    for (const l of this.living) {
+      if (l.cooldown > 0 || !l.enabled()) continue;
+      l.box.setFromObject(l.obj);
+      if (l.box.isEmpty()) continue;
+      l.box.getCenter(l.centre);
+      // the middle of the held thing has to pass over the cat (a carry brushing past it is not a hit)
+      const cr = this.rect(l.box, this.tRect);
+      const inX = sNow.x > cr.min.x && sNow.x < cr.max.x, inY = sNow.y > cr.min.y && sNow.y < cr.max.y;
+      if (!(inX && inY && this.nearInDepth(l.box, wDist, CAT_DEPTH_GAP))) continue;
+      const lc = this.ndc(l.centre);
+      if (this.approach(lc, sNow) < APPROACH) continue;
+      l.cooldown = 0.45;
+      this.logHit('cat', speed);
+      const at = this.landing(l.box);
+      this.hits++;
+      this.catHits++;
+      sound.play('whack', { gain: 0.3, rate: 1.5 });
+      sound.play('pat', { gain: 0.4, rate: 1.1 });
+      this.shakeAmp = Math.max(this.shakeAmp, 0.002);
+      buzz(BUZZ.hit);
+      l.onHit(at, speed);
     }
     // the backsplash: up to two tiles nearest where it lands, seen through the held thing
     if (this.wVel.z >= 0 && this.sVel.y <= 0) return;
@@ -455,6 +524,21 @@ export class Smash {
     }
   }
 
+  /**
+   * How squarely the held thing is moving at a target on screen: 1 straight at it, 0 across,
+   * below 0 away. A hit has to be heading at the thing (within 60 degrees), so a carry going
+   * past it (the pan heading into the oven beside the canister) is not a hit, but a swing is.
+   */
+  private approach(target: THREE.Vector2, at: THREE.Vector2) {
+    const a = this.k.camera.aspect; // NDC x to the same scale as y
+    const dx = (target.x - at.x) * a, dy = target.y - at.y;
+    const vx = this.sVel.x * a, vy = this.sVel.y;
+    const d = Math.hypot(dx, dy), v = Math.hypot(vx, vy);
+    if (v < 1e-6) return 0;
+    if (d < 0.02) return 1; // right over its middle
+    return (dx * vx + dy * vy) / (d * v);
+  }
+
   /** NDC of a world point. */
   private ndc(p: THREE.Vector3) {
     this.v3.copy(p).project(this.k.camera);
@@ -472,12 +556,12 @@ export class Smash {
   }
 
   /** The held thing is about as far from the camera as the box: not far in front of it, not behind it. */
-  private nearInDepth(b: THREE.Box3, wDist: number) {
+  private nearInDepth(b: THREE.Box3, wDist: number, gap = DEPTH_GAP) {
     this.ray.ray.origin.copy(this.k.camera.position);
     this.ray.ray.direction.copy(this.wCentre).sub(this.k.camera.position).normalize();
     const p = this.ray.ray.intersectBox(b, this.v3);
     const d = p ? this.k.camera.position.distanceTo(p) : this.k.camera.position.distanceTo(b.getCenter(this.v3));
-    return d - wDist < DEPTH_GAP && wDist - d < DEPTH_GAP;
+    return d - wDist < gap && wDist - d < gap;
   }
 
   /** Where on the box the hit lands: where her eye, through the held thing, meets it. */
@@ -511,6 +595,7 @@ export class Smash {
     if (crit) { dmg *= DMG.crit; this.crits++; }
     t.hp = Math.max(0, t.hp - dmg);
     t.cooldown = COOLDOWN;
+    this.logHit(t.name, speed);
     t.flash = 1;
     t.shake = 1;
     t.barT = 0;

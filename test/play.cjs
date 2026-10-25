@@ -247,11 +247,11 @@ async function play(page, aim, prefix) {
     }, b64);
   };
   /** The darkest of a few spots (offsets in px) around a point, from one clip screenshot. */
-  const darkestSpot = async (x, y, spots) => {
+  const darkestSpot = async (x, y, spots, colourful = false) => {
     const rx = Math.max(...spots.map(([dx]) => Math.abs(dx))), ry = Math.max(...spots.map(([, dy]) => Math.abs(dy)));
     const clip = { x: Math.max(0, Math.round(x) - rx), y: Math.max(0, Math.round(y) - ry), width: rx * 2 + 1, height: ry * 2 + 1 };
     const b64 = (await page.screenshot({ clip })).toString('base64');
-    return page.evaluate(async ({ b64, spots, ox, oy, w, h }) => {
+    return page.evaluate(async ({ b64, spots, colourful, ox, oy, w, h }) => {
       const img = new Image();
       img.src = 'data:image/png;base64,' + b64;
       await img.decode();
@@ -261,13 +261,14 @@ async function play(page, aim, prefix) {
       g.drawImage(img, 0, 0);
       const data = g.getImageData(0, 0, w, h).data;
       let best = null;
+      const chroma = (q) => Math.max(...q) - Math.min(...q);
       for (const [dx, dy] of spots) {
         const i = ((oy + dy) * w + ox + dx) * 4;
         const q = [data[i], data[i + 1], data[i + 2]];
-        if (!best || q[0] + q[1] + q[2] < best[0] + best[1] + best[2]) best = q;
+        if (!best || (colourful ? chroma(q) > chroma(best) : q[0] + q[1] + q[2] < best[0] + best[1] + best[2])) best = q;
       }
       return best;
-    }, { b64, spots, ox: Math.round(x) - clip.x, oy: Math.round(y) - clip.y, w: clip.width, h: clip.height });
+    }, { b64, spots, colourful, ox: Math.round(x) - clip.x, oy: Math.round(y) - clip.y, w: clip.width, h: clip.height });
   };
   // The cat's fur against the wooden counter: fur is a touch lighter and pinker (measured on the phone render).
   // Fur, lit or in the shade of the chest (a pointing paw is up in front of it): 231,195,157 seen there on desktop.
@@ -306,9 +307,11 @@ async function play(page, aim, prefix) {
       await shot(`s6-bake-${s.stage}`);
       const tt = await page.evaluate(() => window.__game.targets());
       // Once it smokes, the darkest of five spots across the top: a grey puff over one of them is not the crust.
-      // (8 px nearer than the middle: on a portrait phone the middle sits on the pan's far rim behind the crown)
-      const spots = s.stage === 'charred' ? [[0, 8], [-18, 8], [18, 8], [0, 2], [0, 14]] : [[0, 8]];
-      const px = tt.top ? await darkestSpot(tt.top.x, tt.top.y, spots) : null;
+      // Five spots round the middle (on a portrait phone the middle itself can sit on the pan's far
+      // rim, and a low top can sit under it): the crust is the most colourful of them, the rim and
+      // the glass are grey. Once it smokes, the darkest: a grey puff over one of them is not the crust.
+      const spots = [[0, -6], [0, 0], [0, 8], [-16, 2], [16, 2]];
+      const px = tt.top ? await darkestSpot(tt.top.x, tt.top.y, spots, s.stage !== 'charred') : null;
       const d = await page.evaluate(() => window.__game.debug());
       stages[s.stage] = { px, smoke: d.smoke };
       log.push(`s6 ${s.stage} at p=${s.progress.toFixed(2)}: top ${px && px.join(',')} at ${tt.top ? `${Math.round(tt.top.x)},${Math.round(tt.top.y)}` : '-'} smoke ${d.smoke}`);
@@ -1602,7 +1605,7 @@ async function play(page, aim, prefix) {
   {
     // the secret smashing never goes off in an ordinary bake (careful carries are never hits)
     const sm = await page.evaluate(() => window.__game.smash());
-    if (sm.hits) problem(`an ordinary bake smashed the scenery: ${sm.hits} hits, ${sm.breaks} breaks`);
+    if (sm.hits) problem(`an ordinary bake smashed the scenery: ${sm.hits} hits (${sm.catHits} on the cat), ${sm.breaks} breaks: ${sm.hitLog.join('; ')}`);
   }
   {
     const w = await page.evaluate(() => { window.__watch.done = true; return window.__watch; });

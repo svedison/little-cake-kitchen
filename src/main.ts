@@ -249,4 +249,5 @@ const probe = () => {
   slowmo: (n: number) => { kitchen.slowmo = Math.max(1, n || 1); },
   /** The secret smashing: hits, breaks, what can break and how it is doing. */
   smash: () => game.smash.info(),
+  catMood: () => ({ hits: game.catHits, pats: game.pats, strike: game.strike, sulking: game.cat.sulking, expr: game.cat.expr, face: kitchen.toScreen(game.cat.faceCentre()), body: kitchen.toScreen(game.cat.group.localToWorld(new Vector3(0, 0.05, 0))) }),
 };

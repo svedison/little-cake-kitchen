@@ -47,6 +47,28 @@ const SMASH_LINES: Record<string, string[]> = {
   mitt: ['How do you even break a mitt?!', 'My mitt!!'],
   hob: ['The hob!? ...good thing we have an oven.', 'Okay that was kind of cool.'],
 };
+/**
+ * Hitting the cat: what it says as the count goes up (the last band is the strike). Past
+ * STRIKE_AT hits it goes on strike, and everything she does in a Step runs at STRIKE_SLOW
+ * speed until she pats it PATS_TO_FORGIVE times.
+ */
+const CAT_HIT_LINES: { upTo: number; expr: 'ooh' | 'meh' | 'mad' | 'furious'; sound: 'mew' | 'growl' | 'hiss'; lines: string[] }[] = [
+  { upTo: 1, expr: 'ooh', sound: 'mew', lines: ['Ow! Hey!!', 'OW! What was that for?!'] },
+  { upTo: 3, expr: 'meh', sound: 'mew', lines: ['Rude!', 'That hurt!', 'Watch it!'] },
+  { upTo: 6, expr: 'mad', sound: 'growl', lines: ['Stop hitting me!!', "I'm a chef, not a piñata!", 'Mrrrow! STOP!'] },
+  { upTo: 9, expr: 'furious', sound: 'growl', lines: ["I'm warning you...", "I'm COUNTING, you know!", 'Do NOT test me!'] },
+  { upTo: 10, expr: 'furious', sound: 'growl', lines: ["ONE more and I'm going on strike!!"] },
+  { upTo: Infinity, expr: 'furious', sound: 'hiss', lines: ['Hmph!', 'Still on strike!', 'Not. Talking. To. You.', 'Hmph! ...a pat might help. MIGHT.'] },
+];
+const STRIKE_AT = 10;
+const STRIKE_SLOW = 0.1;
+const PATS_TO_FORGIVE = 3;
+/** s between the cat's grumbles while on strike. */
+const SULK_GAP = 9;
+const SULK_LINES = ['Hmph. Bake it yourself.', 'So slow without me, huh?', "I'm still mad.", 'I do like head pats, though. Not that I care.'];
+/** NDC: scenery is kept this far in from the screen's sides at its Station. */
+const DECOR_EDGE = 0.86;
+
 /** s between the cat's cries, however much breaks. */
 const SMASH_TALK_GAP = 5;
 
@@ -196,6 +218,15 @@ export class Game {
   /** The secret: anything she carries can smash the scenery (smash.ts). */
   readonly smash: Smash;
   private smashTalkT = Infinity;
+  /** Hits on the cat since it last forgave her, the pats since the last hit, and whether it is on strike. */
+  catHits = 0;
+  pats = 0;
+  strike = false;
+  private sulkT = 0;
+  /** Scenery kept on screen, with where it would like to stand. */
+  private readonly patBox = new THREE.Box3();
+  private readonly patV = new THREE.Vector3();
+  private readonly decor: { obj: THREE.Object3D; station: StationId; want: THREE.Vector3 }[] = [];
   /** Lightbox pictures of Shelf cakes, by cake number. */
   private readonly thumbs = new Map<number, string>();
 
@@ -234,6 +265,16 @@ export class Game {
     this.smash.add('moka', hob.getObjectByName('moka')!, 'metal', 150);
     this.smash.add('crock', crock, 'ceramic', 150);
     this.smash.add('plant', plant, 'plant', 100);
+    this.decor.push(
+      { obj: crock, station: 'counter', want: crock.position.clone() },
+      { obj: plant, station: 'counter', want: plant.position.clone() },
+      { obj: canister, station: 'stove', want: canister.position.clone() },
+      { obj: mitt, station: 'stove', want: mitt.position.clone() },
+    );
+    this.smash.addLiving(this.cat.rig, () => !this.eating && !this.feed?.held, () => this.onCatHit());
+    k.pointer.first.push(this.patter);
+    k.resized.add(() => this.placeDecor());
+    this.placeDecor();
     this.smash.add('canister', canister, 'ceramic', 120);
     this.smash.add('mitt', mitt, 'plant', 80);
     // The fridge stands against the wall right behind the Shelf, so a phone sees both whole.
@@ -294,6 +335,115 @@ export class Game {
     this.smashTalkT = 0;
     this.cat.say(first ? `${PLAYER_NAME}?! My KITCHEN!!` : pick(SMASH_LINES[kind === 'tile' ? 'tile' : name] ?? SMASH_LINES.tile), 'ooh');
     this.cat.hop();
+  }
+
+  /**
+   * Keep each piece of scenery inside the view at its Station: from where it would like to
+   * stand, it steps toward the middle until all of it is on screen (a narrow phone sees less).
+   */
+  private placeDecor() {
+    const cam = new THREE.PerspectiveCamera(50, this.k.camera.aspect, 0.01, 20);
+    const v = new THREE.Vector3();
+    const box = new THREE.Box3();
+    for (const d of this.decor) {
+      const view = this.k.rail.stationView(d.station);
+      cam.fov = view.fov;
+      cam.aspect = this.k.camera.aspect;
+      cam.updateProjectionMatrix();
+      cam.position.set(view.x, view.pose.y, view.pose.z);
+      cam.lookAt(view.x, view.pose.lookY, view.pose.lookZ);
+      cam.updateMatrixWorld();
+      const dir = Math.sign(view.x - d.want.x);
+      for (let i = 0; i <= 60; i++) {
+        d.obj.position.set(d.want.x + dir * i * 0.005, d.want.y, d.want.z);
+        d.obj.updateWorldMatrix(true, true);
+        box.setFromObject(d.obj);
+        let fits = true;
+        for (let c = 0; c < 8 && fits; c++) {
+          v.set(c & 1 ? box.max.x : box.min.x, c & 2 ? box.max.y : box.min.y, c & 4 ? box.max.z : box.min.z).project(cam);
+          if (Math.abs(v.x) > DECOR_EDGE) fits = false;
+        }
+        if (fits) break;
+      }
+      this.smash.moved(d.obj);
+    }
+  }
+
+  // ---- the cat, hit and patted -------------------------------------------------------
+
+  private onCatHit() {
+    this.catHits++;
+    this.pats = 0;
+    const n = this.catHits;
+    const band = CAT_HIT_LINES.find((b) => n <= b.upTo)!;
+    void nudge(this.cat.rig);
+    this.cat.flinch();
+    sound.play(band.sound, { gain: band.sound === 'hiss' ? 0.5 : 0.6, rate: band.sound === 'mew' ? 1 + Math.random() * 0.15 : 1 });
+    this.smash.mark(this.cat.hatTop(), n > STRIKE_AT ? '💢💢' : '💢', n > 6 ? 'vein big' : 'vein');
+    if (n > STRIKE_AT && !this.strike) {
+      this.strike = true;
+      this.sulkT = 0;
+      this.cat.sulk(true);
+      this.cat.say(`THAT'S IT!! I'm on STRIKE! Good luck baking without me, ${PLAYER_NAME}.`, 'furious', true);
+      this.cat.hop();
+      return;
+    }
+    this.cat.say(pick(band.lines), band.expr, true);
+  }
+
+  /** Touch the cat (not something beside it) and it is a pat. */
+  private readonly patter: PointerHandler = {
+    down: (x, y) => {
+      if (this.eating || !this.cat.group.visible) return false;
+      // the cat's bounding box on screen (cheap: the meshes' own boxes, not every vertex)
+      this.patBox.setFromObject(this.cat.rig);
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let c = 0; c < 8; c++) {
+        const b = this.patBox;
+        const p = this.k.toScreen(this.patV.set(c & 1 ? b.max.x : b.min.x, c & 2 ? b.max.y : b.min.y, c & 4 ? b.max.z : b.min.z));
+        x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+      }
+      if (x < x0 || x > x1 || y < y0 || y > y1) return false;
+      // something she could mean instead: what the Step wants touched, the cake, the book, a shelf cake
+      const near: THREE.Vector3[] = Object.values(this.current?.targets?.() ?? {});
+      if (this.feed && this.cake) near.push(this.cake.position);
+      if (this.book.visible) near.push(this.book.position);
+      for (const c of this.shelfCakes) near.push(c.obj.position);
+      if (near.some((p) => this.k.screenDist(x, y, p) < 44)) return false;
+      return true;
+    },
+    move: () => {},
+    up: () => this.onPat(),
+  };
+
+  private onPat() {
+    void nudge(this.cat.rig);
+    this.cat.flick();
+    this.nudges++;
+    sound.play('purr', { gain: 0.6 });
+    this.smash.mark(this.cat.hatTop(), '♥', 'heart');
+    if (!this.catHits) return;
+    this.pats++;
+    if (this.pats >= PATS_TO_FORGIVE) {
+      const was = this.strike;
+      this.catHits = 0;
+      this.pats = 0;
+      this.strike = false;
+      this.cat.sulk(false);
+      this.cat.say(was ? `...Okay. I forgive you, ${PLAYER_NAME}. Let's bake!` : "Hmph. ...fine, you're forgiven.", 'love', true);
+      this.cat.hop();
+      return;
+    }
+    this.cat.say(this.pats === 1 ? 'Hmph.' : '...a little more.', this.strike ? 'furious' : 'meh', true);
+  }
+
+  /** On strike, the cat grumbles now and then. */
+  private sulkFrame(dt: number) {
+    if (!this.strike) return;
+    this.sulkT += dt;
+    if (this.sulkT < SULK_GAP) return;
+    this.sulkT = 0;
+    this.cat.say(pick(SULK_LINES), 'furious', true);
   }
 
   // ---- idle ---------------------------------------------------------------------
@@ -926,9 +1076,12 @@ export class Game {
 
   private update(dt: number, t: number) {
     this.smashTalkT += dt;
-    this.current?.update(dt, t);
+    this.sulkFrame(dt);
+    // on strike, everything she does runs slow: the Step's carries, holds and meters, and the cake
+    const work = this.strike ? dt * STRIKE_SLOW : dt;
+    this.current?.update(work, t);
     this.confetti.update(dt);
-    this.feed?.update(dt, t);
+    this.feed?.update(work, t);
     this.transitionT += dt;
     this.cueFrame(dt, t);
     this.makeRoom();

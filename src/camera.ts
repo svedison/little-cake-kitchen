@@ -191,6 +191,13 @@ export class Rail implements SwipeTarget {
     this.residualV = 0;
   }
 
+  /** Where the camera stands at a Station with no focus, and its field of view, on this screen. */
+  stationView(id: StationId) {
+    const pose = (this.landscape ? LANDSCAPE : PORTRAIT)[id];
+    const aspect = this.camera.aspect;
+    return { x: STATION_X[id], pose, fov: this.landscape ? FOV.landscape : aspect < 0.75 ? FOV.portrait : FOV.tablet };
+  }
+
   /** The Station pose at this x: between two Stations the poses cross-fade with the same ease as the move. */
   private stationPose(x: number, out: Pose) {
     const poses = this.landscape ? LANDSCAPE : PORTRAIT;

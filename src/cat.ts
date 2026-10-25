@@ -10,13 +10,15 @@ import { STATION_X } from './camera';
 import { Spring, Spring3, easeInOutCubic, easeOutCubic } from './motion';
 import { sound } from './sound';
 
-export type Expr = 'idle' | 'excited' | 'ooh' | 'sleepy' | 'yum' | 'meh' | 'love';
+export type Expr = 'idle' | 'excited' | 'ooh' | 'sleepy' | 'yum' | 'meh' | 'love' | 'mad' | 'furious';
 /** What the cat is doing right now (most important first when two overlap), for the flow and the test driver. */
 export type CatAction = 'chomp' | 'cheer' | 'hop' | 'travel' | 'wave' | 'point' | 'lean' | 'idle';
 /** The mouth while it eats: wide open for the cake, shut on a bite. */
 type Mouth = 'normal' | 'open' | 'shut';
 
 const FUR = 0xffe3c2;
+/** The fur flushes this red while the cat is on strike. */
+const FUR_HOT = 0xff9c8a;
 const EAR = 0xffb6c1;
 
 /** A move between Stations: three hops along the counter in 0.8 s, each 3.5 cm high (tuned by eye). */
@@ -52,7 +54,7 @@ export const CHOMP = { bites: [0.224, 0.449, 0.673], lean: 0.015, shut: 0.08, en
 /** Where the paws sit at rest, in the cat's own (unscaled) frame. */
 const PAW_REST = (s: number) => new THREE.Vector3(s * 0.035, 0.016, 0.04);
 const HEAD_Y = 0.125;
-const EYES_OPEN: Expr[] = ['idle', 'excited', 'ooh'];
+const EYES_OPEN: Expr[] = ['idle', 'excited', 'ooh', 'mad'];
 const UP = new THREE.Vector3(0, 1, 0);
 
 interface FaceLayer { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; canvas: HTMLCanvasElement; tex: THREE.CanvasTexture }
@@ -62,6 +64,10 @@ export class Cat {
   /** Everything that hops (inside the seat's position and turn); a Nudge wiggles it. */
   readonly rig = new THREE.Group();
   expr: Expr = 'idle';
+  /** On strike (hit too often): it stays furious, says nothing but its own lines, and points at nothing. */
+  sulking = false;
+  private heat = 0;
+  private fur!: THREE.MeshStandardMaterial;
   private readonly head = new THREE.Group();
   private readonly paws: THREE.Mesh[] = [];
   private readonly ears: THREE.Mesh[] = [];
@@ -109,6 +115,7 @@ export class Cat {
     this.group.position.copy(at);
     this.group.add(this.rig);
     const fur = new THREE.MeshStandardMaterial({ color: FUR, roughness: 0.8 });
+    this.fur = fur;
 
     const body = new THREE.Mesh(new THREE.SphereGeometry(0.058, 32, 24), fur);
     body.position.y = 0.055;
@@ -203,7 +210,8 @@ export class Cat {
   // ---- the face -------------------------------------------------------------------------
 
   /** Change expression: the new face cross-fades in over 0.12 s and the head swells a touch. */
-  express(expr: Expr) {
+  express(expr: Expr, force = false) {
+    if (this.sulking && !force) return;
     if (expr === this.expr && this.mouth_ === 'normal') return;
     this.expr = expr;
     this.mouth_ = 'normal';
@@ -272,6 +280,19 @@ export class Cat {
       case 'meh':
         eyes((x) => { c.beginPath(); c.moveTo(x - 13, 110); c.lineTo(x + 13, 110); c.stroke(); });
         break;
+      case 'mad':
+      case 'furious': {
+        // brows slanting down to the nose; furious squeezes the eyes to slits
+        const hot = expr === 'furious';
+        c.lineWidth = hot ? 11 : 9;
+        for (const [x, s] of [[92, 1], [164, -1]] as const) {
+          c.beginPath(); c.moveTo(x - s * 20, hot ? 78 : 82); c.lineTo(x + s * 14, hot ? 96 : 94); c.stroke();
+        }
+        c.lineWidth = 9;
+        if (hot) eyes((x) => { c.beginPath(); c.moveTo(x - 13, 112); c.lineTo(x + 13, 108); c.stroke(); });
+        else eyes((x) => { c.beginPath(); c.ellipse(x, 113, 10, 9, 0, 0, Math.PI * 2); c.fill(); });
+        break;
+      }
       case 'love':
         c.fillStyle = '#ff6b8a';
         eyes((x) => {
@@ -303,14 +324,16 @@ export class Cat {
     else if (expr === 'meh') { c.moveTo(108, 172); c.lineTo(148, 172); }
     else if (expr === 'excited' || expr === 'love' || expr === 'yum') { c.arc(128, 160, 20, 0.15 * Math.PI, 0.85 * Math.PI); }
     else if (expr === 'ooh') { c.ellipse(128, 172, 9, 12, 0, 0, Math.PI * 2); }
+    else if (expr === 'mad' || expr === 'furious') { c.arc(128, 186, 18, 1.15 * Math.PI, 1.85 * Math.PI); }
     else { c.moveTo(112, 162); c.quadraticCurveTo(120, 174, 128, 164); c.quadraticCurveTo(136, 174, 144, 162); }
     c.stroke();
     if (expr === 'yum' && mouth === 'normal') { c.fillStyle = '#ff8fa3'; c.beginPath(); c.ellipse(128, 178, 9, 7, 0, 0, Math.PI); c.fill(); }
     l.tex.needsUpdate = true;
   }
 
-  say(line: string, expr?: Expr) {
-    if (expr) this.express(expr);
+  say(line: string, expr?: Expr, force = false) {
+    if (this.sulking && !force) return;
+    if (expr) this.express(expr, force);
     this.hud.bubble(line);
     // A hop or a cheer is already the bounce; both at once lift the hat into the phone's header.
     if (this.hopT >= HOP.time && this.cheerT >= CHEER_T) this.bounceT = 0;
@@ -324,6 +347,7 @@ export class Cat {
    * hold of the Step); calling it again moves the aim.
    */
   point(worldPos: THREE.Vector3) {
+    if (this.sulking) return;
     if (this.pointing) this.pointing.copy(worldPos);
     else this.pointing = worldPos.clone();
   }
@@ -470,7 +494,26 @@ export class Cat {
     return [0, 1 - 0.12 * Math.sin(u * Math.PI)]; // and squashed as it lands
   }
 
+  /** Go on strike (or come off it): the fur flushes red and the face stays furious until it is over. */
+  sulk(on: boolean) {
+    if (on === this.sulking) return;
+    if (on) { this.express('furious'); this.pointing = null; }
+    this.sulking = on;
+    if (!on) this.express('love');
+  }
+
+  /** Hit: the ears flick and it bounces (the Game wiggles the rig too). */
+  flinch() {
+    this.earT = Math.min(this.earT, CHEER_T - 0.35);
+    this.bounceT = 0;
+  }
+
   private update(dt: number, t: number) {
+    const heatWant = this.sulking ? 1 : 0;
+    if (Math.abs(heatWant - this.heat) > 1e-3) {
+      this.heat += (heatWant - this.heat) * (1 - Math.exp(-3 * dt));
+      this.fur.color.setHex(FUR).lerp(new THREE.Color(FUR_HOT), this.heat);
+    }
     const inv = 1 / this.base;
     // ---- where the cat is, how it hops
     let hopY = 0, hopSq = 1;

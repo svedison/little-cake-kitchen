@@ -78,6 +78,8 @@ export class Kitchen {
   readonly pointer: Pointer;
   readonly rail: Rail;
   readonly updaters = new Set<(dt: number, t: number) => void>();
+  /** Called after the screen changes size or shape (the Game keeps its scenery in view). */
+  readonly resized = new Set<() => void>();
   readonly onCollision = new Set<CollisionHandler>();
   /** Smoothed frames per second, for tuning on a real phone. */
   fps = 60;
@@ -256,6 +258,7 @@ export class Kitchen {
     // The rail owns the pose and the field of view; 6/5 is also where style.css lays the header top-left.
     this.rail.landscape = this.camera.aspect > 1.2;
     this.rail.update(0);
+    for (const f of this.resized) f();
   }
 
   private addLights() {
